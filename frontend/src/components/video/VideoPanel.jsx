@@ -407,146 +407,79 @@ const VideoPanel = ({
     setIsCameraOff((p) => !p);
   };
 
-  // ─── Canvas drawing loop ──────────────────────────────────────────────────
-  // Draws screen capture (left 75%) + webcam feeds (right 25%) side-by-side.
-  // screenVideoElem is an HTMLVideoElement for the captured screen; if null
-  // the layout falls back to webcam-only (original behaviour).
-  const startCanvasDrawing = (canvas, screenVideoElem) => {
-    const ctx = canvas.getContext("2d");
-
-    const draw = () => {
-      const W = canvas.width;
-      const H = canvas.height;
-
-      ctx.fillStyle = "#0d1117";
-      ctx.fillRect(0, 0, W, H);
-
-      if (screenVideoElem && screenVideoElem.readyState >= 2) {
-        // Left 75% — code editor screen capture
-        const screenW = Math.floor(W * 0.75);
-        ctx.drawImage(screenVideoElem, 0, 0, screenW, H);
-
-        // Subtle separator
-        ctx.fillStyle = "#30363d";
-        ctx.fillRect(screenW, 0, 2, H);
-
-        // Right 25% — stack all webcam feeds
-        const camW = W - screenW - 2;
-        const camX = screenW + 2;
-        const remoteElems = Object.values(remoteVideoElemsRef.current);
-        const allCams = [...remoteElems, localVideoRef.current].filter(Boolean);
-        const camH = Math.floor(H / Math.max(allCams.length, 1));
-        allCams.forEach((vid, i) => {
-          if (vid?.readyState >= 2) {
-            ctx.drawImage(vid, camX, i * camH, camW, camH);
-          }
-        });
-
-        // Label
-        ctx.font = "bold 13px sans-serif";
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
-        ctx.fillText("Code Screen", 8, 22);
-      } else {
-        // Webcam-only fallback (no screen capture)
-        const remoteElems = Object.values(remoteVideoElemsRef.current);
-
-        if (remoteElems.length === 0) {
-          if (localVideoRef.current?.readyState >= 2) {
-            ctx.drawImage(localVideoRef.current, 0, 0, W, H);
-          }
-        } else {
-          const topH = Math.floor(H * 0.6);
-          const botH = H - topH;
-
-          const candidateEntry = Object.entries(
-            remoteVideoElemsRef.current,
-          ).find(([userId]) => {
-            const p = participants.find((p) => p.userId === userId);
-            return p?.role === "CANDIDATE";
-          });
-          const otherElems = Object.entries(remoteVideoElemsRef.current).filter(
-            ([userId]) => {
-              const p = participants.find((p) => p.userId === userId);
-              return p?.role !== "CANDIDATE";
-            },
-          );
-
-          if (candidateEntry) {
-            const [, videoElem] = candidateEntry;
-            if (videoElem.readyState >= 2)
-              ctx.drawImage(videoElem, 0, 0, W, topH);
-          } else if (remoteElems[0]?.readyState >= 2) {
-            ctx.drawImage(remoteElems[0], 0, 0, W, topH);
-          }
-
-          const bottomVideos = [
-            ...otherElems.map(([, v]) => v),
-            localVideoRef.current,
-          ].filter(Boolean);
-          const colW = Math.floor(W / Math.max(bottomVideos.length, 1));
-          bottomVideos.forEach((vid, i) => {
-            if (vid?.readyState >= 2)
-              ctx.drawImage(vid, i * colW, topH, colW, botH);
-          });
-        }
-
-        ctx.font = "14px sans-serif";
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.fillText("🎯 Candidate", 10, 30);
-      }
-
-      animFrameRef.current = requestAnimationFrame(draw);
-    };
-
-    draw();
-  };
-
   // ─── Start recording ──────────────────────────────────────────────────────
+  // Records screen as the main frame. Camera feeds are drawn as PiP tiles in
+  // the bottom-right corner — browsers black out <video> elements in tab
+  // capture, so we pull frames from the video elements onto a canvas ourselves.
   const handleStartRecording = async () => {
     try {
-      const stream = await getUserMedia();
+      const localStream = await getUserMedia();
 
-      // Request screen capture — includes the code editor
-      let screenStream = null;
-      let screenVideoElem = null;
+      // Screen capture — required
+      let screenStream;
       try {
         screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: { width: 1920, height: 1080, frameRate: 30 },
           audio: false,
         });
         screenStreamRef.current = screenStream;
-        screenVideoElem = document.createElement("video");
-        screenVideoElem.srcObject = screenStream;
-        screenVideoElem.autoplay = true;
-        screenVideoElem.playsInline = true;
-        screenVideoElem.muted = true;
-        await new Promise((res) => {
-          screenVideoElem.onloadedmetadata = res;
-        });
-        await screenVideoElem.play();
       } catch {
-        // User declined screen share — fall back to webcam-only
-        toast("Screen share declined — recording webcam only", { icon: "ℹ️" });
+        toast.error("Screen share is required to start recording");
+        return;
       }
 
-      // Create canvas
+      // Hidden video element to read screen frames
+      const screenVideoElem = document.createElement("video");
+      screenVideoElem.srcObject = screenStream;
+      screenVideoElem.autoplay = true;
+      screenVideoElem.playsInline = true;
+      screenVideoElem.muted = true;
+      await new Promise((res) => { screenVideoElem.onloadedmetadata = res; });
+      await screenVideoElem.play();
+
+      // Canvas = full 1080p — screen fills it, cameras are PiP in the corner
       const canvas = document.createElement("canvas");
       canvas.width = 1920;
       canvas.height = 1080;
       canvasRef.current = canvas;
+      const ctx = canvas.getContext("2d");
 
-      // Start drawing (screen + webcam composite)
-      startCanvasDrawing(canvas, screenVideoElem);
+      const PIP_W = 240;
+      const PIP_H = 135;
+      const PIP_PAD = 12;
+
+      const draw = () => {
+        // Full screen content as the base
+        if (screenVideoElem.readyState >= 2) {
+          ctx.drawImage(screenVideoElem, 0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.fillStyle = "#0d1117";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Camera PiP tiles stacked in the bottom-right corner
+        const remoteElems = Object.values(remoteVideoElemsRef.current);
+        const allCams = [...remoteElems, localVideoRef.current].filter(Boolean);
+        allCams.forEach((vid, i) => {
+          if (vid?.readyState >= 2) {
+            const x = canvas.width - PIP_W - PIP_PAD;
+            const y = canvas.height - (PIP_H + PIP_PAD) * (allCams.length - i);
+            ctx.fillStyle = "#0d1117";
+            ctx.fillRect(x - 2, y - 2, PIP_W + 4, PIP_H + 4);
+            ctx.drawImage(vid, x, y, PIP_W, PIP_H);
+          }
+        });
+
+        animFrameRef.current = requestAnimationFrame(draw);
+      };
+      draw();
 
       // Mix all audio: local mic + all remote participant streams
       const audioCtx = new AudioContext();
       const mixDest = audioCtx.createMediaStreamDestination();
-
-      // Local mic
-      if (stream.getAudioTracks().length > 0) {
-        audioCtx.createMediaStreamSource(stream).connect(mixDest);
+      if (localStream.getAudioTracks().length > 0) {
+        audioCtx.createMediaStreamSource(localStream).connect(mixDest);
       }
-      // Remote participants
       Object.values(remoteVideos).forEach((remoteStream) => {
         if (remoteStream.getAudioTracks().length > 0) {
           audioCtx.createMediaStreamSource(remoteStream).connect(mixDest);
@@ -556,7 +489,6 @@ const VideoPanel = ({
       const canvasStream = canvas.captureStream(30);
       mixDest.stream.getAudioTracks().forEach((t) => canvasStream.addTrack(t));
 
-      // Start MediaRecorder
       recordedChunksRef.current = [];
       const recorder = new MediaRecorder(canvasStream, {
         mimeType: "video/webm;codecs=vp9,opus",
@@ -577,12 +509,7 @@ const VideoPanel = ({
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
-      toast(
-        screenVideoElem
-          ? "Recording started (screen + webcam)"
-          : "Recording started (webcam only)",
-        { icon: "⏺" },
-      );
+      toast("Recording started (screen + cameras)", { icon: "⏺" });
     } catch (err) {
       console.error("Start recording error:", err.message);
       toast.error("Failed to start recording");

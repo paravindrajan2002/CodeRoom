@@ -51,12 +51,12 @@ const ScoreModal = ({ roomId, candidateName, onClose, onSubmitted }) => {
 
                 {/* Header */}
                 <div className="p-6 border-b border-[#30363d]">
-                    <h2 className="text-white font-semibold text-lg">
+                    <h2 className="text-white font-semibold text-lg font-['Space_Grotesk']">
                         Submit Scorecard
                     </h2>
                     {candidateName && (
                         <p className="text-[#8b949e] text-sm mt-1">
-                            Candidate: {candidateName}
+                            Candidate: <span className="text-[#c9d1d9]">{candidateName}</span>
                         </p>
                     )}
                 </div>
@@ -70,10 +70,10 @@ const ScoreModal = ({ roomId, candidateName, onClose, onSubmitted }) => {
                                 Overall Score
                             </label>
                             <div className="flex items-center gap-2">
-                                <span className={`text-3xl font-bold ${getScoreColor(score)}`}>
+                                <span className={`text-3xl font-bold font-['Space_Grotesk'] ${getScoreColor(score)}`}>
                                     {score}
                                 </span>
-                                <span className="text-[#8b949e] text-sm">/10</span>
+                                <span className="text-[#8b949e] text-sm font-['JetBrains_Mono']">/10</span>
                             </div>
                         </div>
 
@@ -87,8 +87,8 @@ const ScoreModal = ({ roomId, candidateName, onClose, onSubmitted }) => {
                         />
 
                         <div className="flex justify-between mt-1">
-                            <span className="text-xs text-[#484f58]">1</span>
-                            <span className="text-xs text-[#484f58]">10</span>
+                            <span className="text-xs text-[#484f58] font-['JetBrains_Mono']">1</span>
+                            <span className="text-xs text-[#484f58] font-['JetBrains_Mono']">10</span>
                         </div>
 
                         <p className={`text-center text-sm mt-2 font-medium ${getScoreColor(score)}`}>
@@ -102,7 +102,7 @@ const ScoreModal = ({ roomId, candidateName, onClose, onSubmitted }) => {
                             <button
                                 key={s}
                                 onClick={() => setScore(s)}
-                                className={`h-8 rounded text-xs font-bold transition-all ${
+                                className={`h-8 rounded text-xs font-bold font-['JetBrains_Mono'] transition-all ${
                                     s === score
                                         ? 'bg-[#238636] text-white scale-110'
                                         : s < score

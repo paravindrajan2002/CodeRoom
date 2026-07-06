@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../store/authStore.js';
 import { questionAPI } from '../../services/api.js';
+import { QuestionCardSkeletonList } from '../../components/shared/Skeleton.jsx';
+import EmptyState from '../../components/shared/EmptyState.jsx';
 
 const DIFFICULTIES = ['ALL', 'EASY', 'MEDIUM', 'HARD'];
 
@@ -16,7 +18,6 @@ const QuestionBank = () => {
     const [search, setSearch] = useState('');
     const [difficulty, setDifficulty] = useState('ALL');
 
-    // ─── Fetch all questions ──────────────────────────────────────────────────
     const fetchQuestions = async () => {
         try {
             setIsLoading(true);
@@ -34,7 +35,6 @@ const QuestionBank = () => {
         fetchQuestions();
     }, []);
 
-    // ─── Filter questions ─────────────────────────────────────────────────────
     useEffect(() => {
         let result = [...questions];
 
@@ -53,7 +53,6 @@ const QuestionBank = () => {
         setFiltered(result);
     }, [search, difficulty, questions]);
 
-    // ─── Delete question ──────────────────────────────────────────────────────
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this question?')) return;
         try {
@@ -65,7 +64,6 @@ const QuestionBank = () => {
         }
     };
 
-    // ─── Difficulty badge ─────────────────────────────────────────────────────
     const DifficultyBadge = ({ difficulty }) => {
         const styles = {
             EASY:   'text-[#3fb950] bg-[#1a2f1a]',
@@ -79,11 +77,26 @@ const QuestionBank = () => {
         );
     };
 
+    const hasActiveFilters = search.trim() !== '' || difficulty !== 'ALL';
+
+    const clearFilters = () => {
+        setSearch('');
+        setDifficulty('ALL');
+    };
+
+    // ─── Difficulty counts for filter pills ──────────────────────────────────
+    const counts = {
+        ALL: questions.length,
+        EASY: questions.filter(q => q.difficulty === 'EASY').length,
+        MEDIUM: questions.filter(q => q.difficulty === 'MEDIUM').length,
+        HARD: questions.filter(q => q.difficulty === 'HARD').length,
+    };
+
     return (
         <div className="min-h-screen bg-[#0d1117] text-white">
 
             {/* Navbar */}
-            <nav className="bg-[#161b22] border-b border-[#30363d] px-6 py-4">
+            <nav className="bg-[#161b22] border-b border-[#30363d] px-6 py-4 sticky top-0 z-10 backdrop-blur-sm bg-opacity-95">
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-6">
                         <h1 className="text-xl font-bold">
@@ -96,15 +109,13 @@ const QuestionBank = () => {
                             >
                                 Dashboard
                             </button>
-                            <button
-                                className="text-sm text-white font-medium border-b border-[#238636]"
-                            >
+                            <button className="text-sm text-white font-medium border-b border-[#238636]">
                                 Question Bank
                             </button>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="text-right">
+                        <div className="text-right hidden sm:block">
                             <p className="text-sm text-white font-medium">{user?.email}</p>
                             <p className="text-xs text-[#8b949e]">{user?.role}</p>
                         </div>
@@ -121,29 +132,34 @@ const QuestionBank = () => {
             <div className="max-w-6xl mx-auto px-6 py-8">
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                     <div>
                         <h2 className="text-2xl font-bold">Question Bank</h2>
                         <p className="text-[#8b949e] text-sm mt-1">
-                            {filtered.length} question{filtered.length !== 1 ? 's' : ''} available
+                            {isLoading
+                                ? 'Loading questions...'
+                                : `${filtered.length} question${filtered.length !== 1 ? 's' : ''} available`}
                         </p>
                     </div>
                     {isInterviewer() && (
                         <button
                             onClick={() => navigate('/questions/create')}
-                            className="bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                            className="bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5"
                         >
-                            + Create Question
+                            <span className="text-base leading-none">+</span> Create Question
                         </button>
                     )}
                 </div>
 
                 {/* Filters */}
-                <div className="flex items-center gap-3 mb-6">
+                <div className="flex items-center gap-3 mb-6 flex-wrap">
                     {/* Search */}
-                    <div className="flex-1 relative">
+                    <div className="flex-1 min-w-48 relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#484f58]">
-                            🔍
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="11" cy="11" r="7" />
+                                <path strokeLinecap="round" d="m21 21-4.3-4.3" />
+                            </svg>
                         </span>
                         <input
                             type="text"
@@ -154,13 +170,13 @@ const QuestionBank = () => {
                         />
                     </div>
 
-                    {/* Difficulty filter */}
+                    {/* Difficulty filter with counts */}
                     <div className="flex items-center gap-2">
                         {DIFFICULTIES.map(d => (
                             <button
                                 key={d}
                                 onClick={() => setDifficulty(d)}
-                                className={`text-xs px-3 py-2 rounded-lg transition-colors font-medium ${
+                                className={`text-xs px-3 py-2 rounded-lg transition-colors font-medium flex items-center gap-1.5 ${
                                     difficulty === d
                                         ? d === 'EASY'   ? 'bg-[#1a2f1a] text-[#3fb950] border border-[#238636]'
                                         : d === 'MEDIUM' ? 'bg-[#2d1f00] text-[#d29922] border border-[#d29922]'
@@ -170,6 +186,7 @@ const QuestionBank = () => {
                                 }`}
                             >
                                 {d}
+                                <span className="opacity-60">{counts[d]}</span>
                             </button>
                         ))}
                     </div>
@@ -177,25 +194,44 @@ const QuestionBank = () => {
 
                 {/* Question list */}
                 {isLoading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <svg className="animate-spin h-8 w-8 text-[#238636]" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                        </svg>
-                    </div>
+                    <QuestionCardSkeletonList count={5} />
                 ) : filtered.length === 0 ? (
-                    <div className="text-center py-20">
-                        <p className="text-[#8b949e] text-lg">No questions found</p>
-                        <p className="text-[#484f58] text-sm mt-1">
-                            {isInterviewer() ? 'Create your first question above' : 'Check back later'}
-                        </p>
-                    </div>
+                    hasActiveFilters ? (
+                        <EmptyState
+                            icon={
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8b949e" strokeWidth="1.5">
+                                    <circle cx="11" cy="11" r="7" />
+                                    <path strokeLinecap="round" d="m21 21-4.3-4.3" />
+                                </svg>
+                            }
+                            title="No matches found"
+                            subtitle="Try adjusting your search or difficulty filter"
+                            actionLabel="Clear filters"
+                            onAction={clearFilters}
+                        />
+                    ) : (
+                        <EmptyState
+                            icon={
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8b949e" strokeWidth="1.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                            }
+                            title="No questions yet"
+                            subtitle={
+                                isInterviewer()
+                                    ? "Build your question bank with coding problems, complete with test cases and diagrams"
+                                    : "Check back later for available questions"
+                            }
+                            actionLabel={isInterviewer() ? "+ Create Question" : undefined}
+                            onAction={isInterviewer() ? () => navigate('/questions/create') : undefined}
+                        />
+                    )
                 ) : (
                     <div className="space-y-3">
                         {filtered.map((q) => (
                             <div
                                 key={q.id}
-                                className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 hover:border-[#484f58] transition-colors"
+                                className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 hover:border-[#484f58] hover:shadow-lg hover:shadow-black/20 transition-all"
                             >
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex-1 min-w-0">
@@ -210,7 +246,7 @@ const QuestionBank = () => {
                                             {q.description}
                                         </p>
 
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3 flex-wrap">
                                             {q.tags && (
                                                 <div className="flex items-center gap-1 flex-wrap">
                                                     {q.tags.split(',').map(tag => (
@@ -224,14 +260,16 @@ const QuestionBank = () => {
                                                 </div>
                                             )}
                                             {q.testCases?.length > 0 && (
-                                                <span className="text-xs text-[#484f58]">
+                                                <span className="text-xs text-[#484f58] flex items-center gap-1">
+                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
                                                     {q.testCases.length} test case{q.testCases.length !== 1 ? 's' : ''}
                                                 </span>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Actions — interviewer only */}
                                     {isInterviewer() && (
                                         <div className="flex items-center gap-2 shrink-0">
                                             <button

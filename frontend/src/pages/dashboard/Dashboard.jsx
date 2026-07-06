@@ -1,166 +1,162 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
 import useAuthStore from "../../store/authStore.js";
-import { interviewAPI, roomAPI } from "../../services/api.js";
 import { INTERVIEW_STATUS } from "../../utils/constants.js";
+import { useInterviews } from "../../hooks/useInterviews.js";
+import { useClipboard } from "../../hooks/useClipboard.js";
 import ScoreModal from "../../components/room/ScoreModal.jsx";
+import { CardSkeletonList } from "../../components/shared/Skeleton.jsx";
+import EmptyState from "../../components/shared/EmptyState.jsx";
+import StatsRow from "../../components/dashboard/StatsRow.jsx";
+import CreateInterviewForm from "../../components/dashboard/CreateInterviewForm.jsx";
+import InterviewCard from "../../components/dashboard/InterviewCard.jsx";
+import FilterBar from "../../components/dashboard/FilterBar.jsx";
+
+const isActive = (status) =>
+  status !== INTERVIEW_STATUS.COMPLETED &&
+  status !== INTERVIEW_STATUS.REVIEWED &&
+  status !== INTERVIEW_STATUS.CANCELLED;
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
+
+const getDisplayName = (email) => {
+  if (!email) return "there";
+  const local = email.split("@")[0];
+  return local.charAt(0).toUpperCase() + local.slice(1);
+};
+
+const getInitial = (email) => (email ? email[0].toUpperCase() : "?");
+
+const TODAY = new Date().toLocaleDateString(undefined, {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, logout, isInterviewer } = useAuthStore();
+  const { interviews, isLoading, fetchInterviews, createInterview } =
+    useInterviews(isInterviewer);
+  const { copy } = useClipboard();
 
-  const [interviews, setInterviews] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [maxInterviewers, setMaxInterviewers] = useState(1);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [showDashboardScoreModal, setShowDashboardScoreModal] = useState(false);
+  const [showScoreModal, setShowScoreModal] = useState(false);
   const [selectedInterview, setSelectedInterview] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
-  const isActive = (status) =>
-    status !== INTERVIEW_STATUS.COMPLETED &&
-    status !== INTERVIEW_STATUS.REVIEWED &&
-    status !== INTERVIEW_STATUS.CANCELLED;
-
-  // ─── Fetch interviews ──────────────────────────────────────────────────────
-  const fetchInterviews = async () => {
-    try {
-      setIsLoading(true);
-      if (isInterviewer()) {
-        const response = await interviewAPI.getMyInterviews();
-        setInterviews(response.data);
-      }
-    } catch (err) {
-      toast.error("Failed to load interviews");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchInterviews();
-  }, []);
-
-  // ─── Create interview ──────────────────────────────────────────────────────
-  const handleCreateInterview = async (e) => {
-    e.preventDefault();
-    if (!scheduledAt) {
-      toast.error("Please select a date and time");
-      return;
-    }
-
-    try {
-      setIsCreating(true);
-
-      const interviewRes = await interviewAPI.create({
-        scheduledAt,
-        maxInterviewers,
-      });
-      const interview = interviewRes.data;
-
-      const roomRes = await roomAPI.create(interview.id);
-      const room = roomRes.data;
-
-      await interviewAPI.updateRoomId(interview.id, room.id);
-
-      const completeInterview = { ...interview, roomId: room.id };
-      setInterviews((prev) => [completeInterview, ...prev]);
-
-      // Candidate link
-      const candidateLink = `${window.location.origin}/room/${room.id}`;
-      navigator.clipboard.writeText(candidateLink);
-      toast.success("Interview created! Candidate link copied!");
-
-      setShowCreateForm(false);
-      setScheduledAt("");
-      setMaxInterviewers(1);
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to create interview");
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  // ─── Copy links ────────────────────────────────────────────────────────────
-  const handleCopyCandidateLink = (roomId) => {
-    const link = `${window.location.origin}/room/${roomId}?role=candidate`;
-    navigator.clipboard.writeText(link);
-    toast.success("Candidate link copied!");
-  };
-
-  const handleCopyInterviewerLink = (roomId) => {
-    const link = `${window.location.origin}/room/${roomId}?role=interviewer`;
-    navigator.clipboard.writeText(link);
-    toast.success("Panelist link copied!");
-  };
-
-  const handleCopyRecordingLink = (recordingUrl) => {
-    navigator.clipboard.writeText(recordingUrl);
-    toast.success("Recording link copied!");
-  };
-
-  // ─── Join room ─────────────────────────────────────────────────────────────
-  const handleJoinRoom = (roomId) => {
-    navigate(`/room/${roomId}`);
-  };
-
-  // ─── Format duration ───────────────────────────────────────────────────────
-  const formatDuration = (startedAt, endedAt) => {
-    if (!startedAt || !endedAt) return null;
-    const minutes = Math.round(
-      (new Date(endedAt) - new Date(startedAt)) / 60000,
-    );
-    return `${minutes} min`;
-  };
-
-  // ─── Status badge ──────────────────────────────────────────────────────────
-  const StatusBadge = ({ status }) => {
-    const styles = {
-      SCHEDULED: "bg-[#1f3244] text-[#58a6ff] border-[#1f3244]",
-      IN_PROGRESS: "bg-[#1a2f1a] text-[#3fb950] border-[#238636]",
-      COMPLETED: "bg-[#1f1f2e] text-[#8b949e] border-[#30363d]",
-      REVIEWED: "bg-[#2d1f47] text-[#bc8cff] border-[#8957e5]",
-      CANCELLED: "bg-[#2d1318] text-[#f85149] border-[#da3633]",
+  const stats = useMemo(() => {
+    const total = interviews.length;
+    const active = interviews.filter((i) => isActive(i.status)).length;
+    const completed = interviews.filter(
+      (i) => i.status === INTERVIEW_STATUS.REVIEWED
+    ).length;
+    return {
+      total,
+      active,
+      completed,
+      successRate: total > 0 ? Math.round((completed / total) * 100) : 0,
     };
-    return (
-      <span
-        className={`text-xs px-2 py-0.5 rounded-full border font-medium ${styles[status] || styles.SCHEDULED}`}
-      >
-        {status.replace("_", " ")}
-      </span>
+  }, [interviews]);
+
+  const filteredInterviews = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return interviews.filter((i) => {
+      const matchesStatus = statusFilter === "ALL" || i.status === statusFilter;
+      const matchesSearch =
+        !term || (i.candidateName || "").toLowerCase().includes(term);
+      return matchesStatus && matchesSearch;
+    });
+  }, [interviews, statusFilter, search]);
+
+  // ─── Handlers ────────────────────────────────────────────────────────────
+  const handleCreate = async (payload) => {
+    const interview = await createInterview(payload);
+    copy(
+      `${window.location.origin}/room/${interview.roomId}`,
+      "Interview created! Candidate link copied!"
     );
+    setShowCreateForm(false);
+  };
+
+  const handleCopyCandidateLink = (roomId) =>
+    copy(
+      `${window.location.origin}/room/${roomId}?role=candidate`,
+      "Candidate link copied!"
+    );
+
+  const handleCopyInterviewerLink = (roomId) =>
+    copy(
+      `${window.location.origin}/room/${roomId}?role=interviewer`,
+      "Panelist link copied!"
+    );
+
+  const handleCopyRecordingLink = (recordingUrl) =>
+    copy(recordingUrl, "Recording link copied!");
+
+  const handleJoinRoom = (roomId) => navigate(`/room/${roomId}`);
+
+  const handleOpenScoreModal = (interview) => {
+    setSelectedInterview(interview);
+    setShowScoreModal(true);
+  };
+
+  const closeScoreModal = () => {
+    setShowScoreModal(false);
+    setSelectedInterview(null);
   };
 
   return (
     <div className="min-h-screen bg-[#0d1117] text-white">
       {/* Navbar */}
-      <nav className="bg-[#161b22] border-b border-[#30363d] px-6 py-4">
+      <nav className="bg-[#161b22]/95 border-b border-[#30363d] px-6 py-3.5 sticky top-0 z-20 backdrop-blur-md">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold">
-              Code<span className="text-[#238636]">Room</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#3fb950] shadow-[0_0_10px_#3fb950]" />
+              <h1 className="text-lg font-bold font-['Space_Grotesk'] tracking-tight">
+                Code<span className="text-[#3fb950]">Room</span>
+              </h1>
+            </div>
             {isInterviewer() && (
               <button
                 onClick={() => navigate("/questions")}
-                className="text-sm text-[#8b949e] hover:text-white transition-colors"
+                className="flex items-center gap-1.5 text-sm text-[#8b949e] hover:text-white transition-colors"
               >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 22H20V4a2 2 0 00-2-2H6.5A2.5 2.5 0 004 4.5v15z" />
+                </svg>
                 Question Bank
               </button>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-sm text-white font-medium">{user?.email}</p>
-              <p className="text-xs text-[#8b949e]">{user?.role}</p>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2.5 pr-3 border-r border-[#30363d]">
+              <div className="w-8 h-8 rounded-full bg-linear-to-br from-[#238636] to-[#2ea043] flex items-center justify-center text-xs font-bold text-white font-['Space_Grotesk'] shrink-0">
+                {getInitial(user?.email)}
+              </div>
+              <div className="leading-tight">
+                <p className="text-sm text-white font-medium leading-tight">
+                  {getDisplayName(user?.email)}
+                </p>
+                <p className="text-[10px] text-[#8b949e] font-['JetBrains_Mono'] uppercase tracking-wide leading-tight">
+                  {user?.role}
+                </p>
+              </div>
             </div>
             <button
               onClick={logout}
-              className="text-sm text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors"
+              className="text-sm text-[#8b949e] hover:text-[#f85149] border border-[#30363d] hover:border-[#f85149]/40 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
             >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+              </svg>
               Sign out
             </button>
           </div>
@@ -168,279 +164,132 @@ const Dashboard = () => {
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-bold">
-              {isInterviewer() ? "My Interviews" : "My Sessions"}
-            </h2>
-            <p className="text-[#8b949e] text-sm mt-1">
-              {isInterviewer()
-                ? "Manage and conduct technical interviews"
-                : "Your interview sessions"}
-            </p>
+        {/* Hero / greeting */}
+        <div className="dashboard-hero relative rounded-2xl border border-[#30363d] bg-linear-to-br from-[#161b22] to-[#0d1117] p-6 sm:p-8 mb-6 overflow-hidden">
+          <div className="absolute -top-24 -right-16 w-72 h-72 bg-[#238636]/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex items-center justify-between flex-wrap gap-6">
+            <div>
+              <p className="text-xs text-[#3fb950] font-['JetBrains_Mono'] uppercase tracking-widest mb-2">
+                {TODAY}
+              </p>
+              <h2 className="text-2xl sm:text-3xl font-bold font-['Space_Grotesk'] tracking-tight mb-2">
+                {getGreeting()}, <span className="text-[#3fb950]">{getDisplayName(user?.email)}</span>
+              </h2>
+              <p className="text-[#8b949e] text-sm max-w-md">
+                {isInterviewer()
+                  ? "Manage your technical interview pipeline and review candidates."
+                  : "Track your upcoming and past interview sessions."}
+              </p>
+            </div>
+            {isInterviewer() && (
+              <button
+                onClick={() => setShowCreateForm((v) => !v)}
+                className="bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-semibold px-5 py-3 rounded-xl transition-all hover:shadow-[0_0_24px_rgba(63,185,80,0.35)] flex items-center gap-2 shrink-0"
+              >
+                <span className="text-lg leading-none">+</span> New Interview
+              </button>
+            )}
           </div>
-          {isInterviewer() && (
-            <button
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              className="bg-[#238636] hover:bg-[#2ea043] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              + New Interview
-            </button>
-          )}
         </div>
+
+        {/* Stats */}
+        {isInterviewer() && !isLoading && interviews.length > 0 && (
+          <StatsRow
+            total={stats.total}
+            active={stats.active}
+            completed={stats.completed}
+            successRate={stats.successRate}
+          />
+        )}
 
         {/* Create form */}
         {showCreateForm && (
-          <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 mb-6">
-            <h3 className="text-white font-semibold mb-4">
-              Schedule Interview
+          <CreateInterviewForm
+            onCancel={() => setShowCreateForm(false)}
+            onSubmit={handleCreate}
+          />
+        )}
+
+        {/* Section header + filters */}
+        {!isLoading && interviews.length > 0 && (
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <h3 className="text-base font-semibold font-['Space_Grotesk'] text-white">
+              {isInterviewer() ? "All Interviews" : "My Sessions"}
+              <span className="text-[#484f58] font-normal ml-2 text-sm">
+                {filteredInterviews.length}
+              </span>
             </h3>
-            <form
-              onSubmit={handleCreateInterview}
-              className="flex items-end gap-4 flex-wrap"
-            >
-              <div className="flex-1 min-w-48">
-                <label className="block text-sm text-[#8b949e] mb-1.5">
-                  Date & Time
-                </label>
-                <input
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(e) => setScheduledAt(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#238636] transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-[#8b949e] mb-1.5">
-                  Panel Size
-                </label>
-                <select
-                  value={maxInterviewers}
-                  onChange={(e) => setMaxInterviewers(Number(e.target.value))}
-                  className="bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#238636] transition-colors"
-                >
-                  <option value={1}>1 Interviewer</option>
-                  <option value={2}>2 Interviewers</option>
-                  <option value={3}>3 Interviewers</option>
-                  <option value={4}>4 Interviewers</option>
-                </select>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateForm(false)}
-                  className="px-4 py-2.5 text-sm text-[#8b949e] border border-[#30363d] rounded-lg hover:border-[#484f58] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreating}
-                  className="px-4 py-2.5 text-sm bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 text-white rounded-lg transition-colors"
-                >
-                  {isCreating ? "Creating..." : "Create Interview"}
-                </button>
-              </div>
-            </form>
+            {isInterviewer() && (
+              <FilterBar
+                statusFilter={statusFilter}
+                onStatusFilterChange={setStatusFilter}
+                search={search}
+                onSearchChange={setSearch}
+              />
+            )}
           </div>
         )}
 
         {/* Interview list */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <svg
-              className="animate-spin h-8 w-8 text-[#238636]"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8z"
-              />
-            </svg>
-          </div>
+          <CardSkeletonList count={4} />
         ) : interviews.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-[#8b949e] text-lg">No interviews yet</p>
-            <p className="text-[#484f58] text-sm mt-1">
-              {isInterviewer()
-                ? "Create your first interview above"
-                : "Ask your interviewer to share the room link with you"}
-            </p>
-          </div>
+          <EmptyState
+            icon={
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8b949e" strokeWidth="1.5">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                />
+              </svg>
+            }
+            title="No interviews yet"
+            subtitle={
+              isInterviewer()
+                ? "Schedule your first technical interview to get started"
+                : "Ask your interviewer to share the room link with you"
+            }
+            actionLabel={isInterviewer() ? "+ New Interview" : undefined}
+            onAction={isInterviewer() ? () => setShowCreateForm(true) : undefined}
+          />
+        ) : filteredInterviews.length === 0 ? (
+          <EmptyState
+            icon={
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8b949e" strokeWidth="1.5">
+                <circle cx="11" cy="11" r="7" strokeLinecap="round" />
+                <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
+              </svg>
+            }
+            title="No matching interviews"
+            subtitle="Try a different filter or search term"
+          />
         ) : (
           <div className="space-y-3">
-            {interviews.map((interview) => (
-              <div
+            {filteredInterviews.map((interview) => (
+              <InterviewCard
                 key={interview.id}
-                className="bg-[#161b22] border border-[#30363d] rounded-xl p-5 flex items-center justify-between hover:border-[#484f58] transition-colors"
-              >
-                {/* Left — info */}
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <StatusBadge status={interview.status} />
-                    {interview.candidateName && (
-                      <span className="text-xs text-[#8b949e]">
-                        with {interview.candidateName}
-                      </span>
-                    )}
-                  </div>
-
-                  {interview.startedAt && interview.endedAt && (
-                    <span className="text-xs text-[#484f58]">
-                      ⏱ {formatDuration(interview.startedAt, interview.endedAt)}
-                    </span>
-                  )}
-
-                  {interview.score && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <span
-                        className={`text-sm font-bold ${
-                          interview.score >= 7
-                            ? "text-[#3fb950]"
-                            : interview.score >= 5
-                              ? "text-[#d29922]"
-                              : "text-[#f85149]"
-                        }`}
-                      >
-                        {interview.score}/10
-                      </span>
-                      <span className="text-xs text-[#8b949e]">
-                        {interview.score >= 7
-                          ? "✅ Proceed"
-                          : interview.score >= 5
-                            ? "⚠️ Consider"
-                            : "❌ Reject"}
-                      </span>
-                    </div>
-                  )}
-
-                  {interview.notes && (
-                    <p className="text-xs text-[#484f58] mt-1 max-w-xs truncate">
-                      "{interview.notes}"
-                    </p>
-                  )}
-
-                  {interview.recordingUrl && (
-                    <span className="inline-flex items-center gap-1 text-xs text-[#bc8cff] mt-1">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/>
-                      </svg>
-                      Recording available
-                    </span>
-                  )}
-                </div>
-
-                {/* Right — actions */}
-                <div className="flex items-center gap-2">
-                  {/* Active interview — show links + join */}
-                  {isActive(interview.status) && (
-                    <>
-                      {/* Candidate link */}
-                      <button
-                        onClick={() =>
-                          handleCopyCandidateLink(interview.roomId)
-                        }
-                        className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors"
-                      >
-                        Copy Candidate Link
-                      </button>
-
-                      {/* Panelist link — only if panel > 1 */}
-                      {interview.maxInterviewers > 1 && (
-                        <button
-                          onClick={() =>
-                            handleCopyInterviewerLink(interview.roomId)
-                          }
-                          className="text-xs text-[#58a6ff] hover:text-white border border-[#1f3244] hover:border-[#58a6ff] px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                          Copy Panelist Link
-                        </button>
-                      )}
-
-                      {/* Join room */}
-                      <button
-                        onClick={() => handleJoinRoom(interview.roomId)}
-                        className="text-xs bg-[#238636] hover:bg-[#2ea043] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-                      >
-                        Join Room
-                      </button>
-                    </>
-                  )}
-
-                  {/* Completed — submit score */}
-                  {interview.status === INTERVIEW_STATUS.COMPLETED && (
-                    <button
-                      onClick={() => {
-                        setSelectedInterview(interview);
-                        setShowDashboardScoreModal(true);
-                      }}
-                      className="text-xs bg-[#238636] hover:bg-[#2ea043] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-                    >
-                      Submit Score
-                    </button>
-                  )}
-
-                  {/* Reviewed — show completed badge */}
-                  {interview.status === INTERVIEW_STATUS.REVIEWED && (
-                    <span className="text-xs text-[#8b949e] border border-[#30363d] px-3 py-1.5 rounded-lg">
-                      Reviewed ✓
-                    </span>
-                  )}
-
-                  {/* Recording link — show for any interview with a recording */}
-                  {interview.recordingUrl && (
-                    <>
-                      <button
-                        onClick={() => handleCopyRecordingLink(interview.recordingUrl)}
-                        className="text-xs text-[#bc8cff] hover:text-white border border-[#2d1f47] hover:border-[#bc8cff] px-3 py-1.5 rounded-lg transition-colors"
-                        title="Copy recording link to share with team"
-                      >
-                        Copy Recording Link
-                      </button>
-                      <a
-                        href={interview.recordingUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
-                        title="Watch recording"
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M8 5v14l11-7z"/>
-                        </svg>
-                        Watch
-                      </a>
-                    </>
-                  )}
-                </div>
-              </div>
+                interview={interview}
+                isActive={isActive}
+                onCopyCandidateLink={handleCopyCandidateLink}
+                onCopyInterviewerLink={handleCopyInterviewerLink}
+                onCopyRecordingLink={handleCopyRecordingLink}
+                onJoinRoom={handleJoinRoom}
+                onSubmitScore={handleOpenScoreModal}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {/* Score modal from dashboard */}
-      {showDashboardScoreModal && selectedInterview && (
+      {/* Score modal */}
+      {showScoreModal && selectedInterview && (
         <ScoreModal
           roomId={selectedInterview.roomId}
           candidateName={selectedInterview.candidateName || "Candidate"}
-          onClose={() => {
-            setShowDashboardScoreModal(false);
-            setSelectedInterview(null);
-          }}
+          onClose={closeScoreModal}
           onSubmitted={() => {
-            setShowDashboardScoreModal(false);
-            setSelectedInterview(null);
+            closeScoreModal();
             fetchInterviews();
           }}
         />
