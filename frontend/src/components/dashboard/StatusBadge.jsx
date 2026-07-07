@@ -1,51 +1,27 @@
 // Single source of truth for status colors — the badge, the card's left
 // accent bar, and any future status-driven UI all read from this map.
+// `accent` (unchanged key) drives every color; the old Tailwind class fields
+// are gone because the dashboard now uses the scoped cr- system.
 export const STATUS_STYLES = {
-  SCHEDULED: {
-    bg: "bg-[#1f3244]",
-    text: "text-[#58a6ff]",
-    border: "border-[#1f3244]",
-    dot: "bg-[#58a6ff]",
-    accent: "#58a6ff",
-  },
-  IN_PROGRESS: {
-    bg: "bg-[#1a2f1a]",
-    text: "text-[#3fb950]",
-    border: "border-[#238636]",
-    dot: "bg-[#3fb950] animate-pulse",
-    accent: "#3fb950",
-  },
-  COMPLETED: {
-    bg: "bg-[#1f1f2e]",
-    text: "text-[#8b949e]",
-    border: "border-[#30363d]",
-    dot: "bg-[#8b949e]",
-    accent: "#8b949e",
-  },
-  REVIEWED: {
-    bg: "bg-[#2d1f47]",
-    text: "text-[#bc8cff]",
-    border: "border-[#8957e5]",
-    dot: "bg-[#bc8cff]",
-    accent: "#bc8cff",
-  },
-  CANCELLED: {
-    bg: "bg-[#2d1318]",
-    text: "text-[#f85149]",
-    border: "border-[#da3633]",
-    dot: "bg-[#f85149]",
-    accent: "#f85149",
-  },
+  SCHEDULED: { accent: "#58a6ff", label: "Scheduled" },
+  IN_PROGRESS: { accent: "#3fb950", label: "In Progress", pulse: true },
+  COMPLETED: { accent: "#8b949e", label: "Completed" },
+  REVIEWED: { accent: "#bc8cff", label: "Reviewed" },
+  CANCELLED: { accent: "#f85149", label: "Cancelled" },
 };
 
 const StatusBadge = ({ status }) => {
   const s = STATUS_STYLES[status] || STATUS_STYLES.SCHEDULED;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border font-medium font-['JetBrains_Mono'] tracking-wide ${s.bg} ${s.text} ${s.border}`}
+      className="cr-badge"
+      style={{ color: s.accent, background: s.accent + "1f", borderColor: s.accent + "40" }}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-      {status.replace("_", " ")}
+      <span
+        className={`cr-badge-dot${s.pulse ? " pulse" : ""}`}
+        style={{ background: s.accent }}
+      />
+      {s.label}
     </span>
   );
 };

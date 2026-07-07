@@ -1,27 +1,22 @@
-const StatCard = ({ label, value, suffix, color, glow, icon, bar }) => (
-  <div
-    className="group bg-[#161b22] border border-[#30363d] rounded-xl p-4 flex items-center gap-3.5 transition-all hover:-translate-y-0.5 hover:border-[#484f58]"
-    style={{ "--glow": glow }}
-  >
+const StatCard = ({ label, value, suffix, accent, neutral, bar, icon }) => (
+  <div className="cr-stat-card" style={{ "--glow": accent + "55" }}>
     <div
-      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 border transition-shadow group-hover:shadow-[0_0_16px_var(--glow)]"
-      style={{ backgroundColor: glow, borderColor: glow.replace("0.14", "0.35") }}
+      className="cr-stat-ico"
+      style={{ backgroundColor: accent + "22", borderColor: accent + "55" }}
     >
       {icon}
     </div>
-    <div className="min-w-0 flex-1">
-      <p className={`text-2xl font-bold font-['Space_Grotesk'] leading-none ${color}`}>
+    <div className="cr-stat-body">
+      <p className="cr-stat-value" style={{ color: neutral ? "var(--cr-text)" : accent }}>
         {value}
-        {suffix && <span className="text-sm font-medium text-[#484f58]">{suffix}</span>}
+        {suffix && <span className="cr-stat-suffix">{suffix}</span>}
       </p>
-      <p className="text-[11px] text-[#8b949e] mt-1 font-['JetBrains_Mono'] uppercase tracking-wide truncate">
-        {label}
-      </p>
+      <p className="cr-stat-label">{label}</p>
       {bar != null && (
-        <div className="h-1 w-full bg-[#0d1117] rounded-full mt-2 overflow-hidden">
+        <div className="cr-stat-bar">
           <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${bar}%`, backgroundColor: glow.replace("0.14", "1") }}
+            className="cr-stat-bar-fill"
+            style={{ width: `${bar}%`, backgroundColor: accent }}
           />
         </div>
       )}
@@ -30,12 +25,12 @@ const StatCard = ({ label, value, suffix, color, glow, icon, bar }) => (
 );
 
 const StatsRow = ({ total, active, completed, successRate }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+  <div className="cr-stats">
     <StatCard
       label="Total Interviews"
       value={total}
-      color="text-white"
-      glow="rgba(88,166,255,0.14)"
+      accent="#58a6ff"
+      neutral
       icon={
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" strokeWidth="1.8">
           <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -46,8 +41,7 @@ const StatsRow = ({ total, active, completed, successRate }) => (
     <StatCard
       label="Active"
       value={active}
-      color="text-[#3fb950]"
-      glow="rgba(63,185,80,0.14)"
+      accent="#3fb950"
       icon={
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3fb950" strokeWidth="1.8">
           <circle cx="12" cy="12" r="9" />
@@ -58,8 +52,7 @@ const StatsRow = ({ total, active, completed, successRate }) => (
     <StatCard
       label="Reviewed"
       value={completed}
-      color="text-[#bc8cff]"
-      glow="rgba(188,140,255,0.14)"
+      accent="#bc8cff"
       icon={
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bc8cff" strokeWidth="1.8">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -70,8 +63,7 @@ const StatsRow = ({ total, active, completed, successRate }) => (
       label="Completion Rate"
       value={successRate}
       suffix="%"
-      color="text-[#d29922]"
-      glow="rgba(210,153,34,0.14)"
+      accent="#d29922"
       bar={successRate}
       icon={
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d29922" strokeWidth="1.8">
