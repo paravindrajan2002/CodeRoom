@@ -130,10 +130,21 @@ export const ROOM_CSS = `
   .cr-md-code-block code{font-size:11px;font-family:var(--cr-mono);color:var(--cr-text);}
 
   /* Editor column */
-  .cr-room-editor-col{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  .cr-room-editor-col{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+  .cr-room-editor-area{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+  .cr-room-output-wrap{flex-shrink:0;border-top:1px solid var(--cr-border);overflow:hidden;}
+  /* Resizers */
+  .cr-room-hresizer{width:6px;flex-shrink:0;cursor:col-resize;position:relative;background:transparent;transition:background .15s;}
+  .cr-room-hresizer::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:28px;border-radius:2px;background:var(--cr-border2);transition:background .15s;}
+  .cr-room-hresizer:hover,.cr-room-hresizer.dragging{background:rgba(63,185,80,0.12);}
+  .cr-room-hresizer:hover::after,.cr-room-hresizer.dragging::after{background:var(--cr-green);}
+  .cr-room-vresizer{height:6px;flex-shrink:0;cursor:row-resize;position:relative;background:transparent;transition:background .15s;}
+  .cr-room-vresizer::after{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:2px;width:28px;border-radius:2px;background:var(--cr-border2);transition:background .15s;}
+  .cr-room-vresizer:hover,.cr-room-vresizer.dragging{background:rgba(63,185,80,0.12);}
+  .cr-room-vresizer:hover::after,.cr-room-vresizer.dragging::after{background:var(--cr-green);}
 
   /* Editor chrome */
-  .cr-room-editor{flex:1;overflow:hidden;display:flex;flex-direction:column;background:var(--cr-bg2);}
+  .cr-room-editor{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:var(--cr-bg2);}
   .cr-room-editor-bar{background:var(--cr-panel);border-bottom:1px solid var(--cr-border);padding:6px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
   .cr-room-editor-tab{display:flex;align-items:center;gap:8px;background:var(--cr-bg2);padding:5px 12px;border-radius:8px 8px 0 0;border-top:2px solid var(--cr-green2);}
   .cr-room-editor-tab-dot{width:8px;height:8px;border-radius:50%;background:var(--cr-green2);}
@@ -141,7 +152,7 @@ export const ROOM_CSS = `
   .cr-room-editor-body{flex:1;overflow:hidden;}
 
   /* Output panel */
-  .cr-out{background:var(--cr-panel);border-top:1px solid var(--cr-border);flex-shrink:0;display:flex;flex-direction:column;height:220px;}
+  .cr-out{background:var(--cr-panel);display:flex;flex-direction:column;height:100%;}
   .cr-out-bar{display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid var(--cr-border);flex-shrink:0;}
   .cr-out-tabs{display:flex;align-items:center;}
   .cr-out-tab{display:flex;align-items:center;font-family:var(--cr-body);font-size:12px;font-weight:500;color:var(--cr-dim);background:none;border:none;border-bottom:2px solid transparent;padding:8px 12px;cursor:pointer;transition:color .2s;}
@@ -175,7 +186,7 @@ export const ROOM_CSS = `
   .cr-term-divider{border-top:1px solid var(--cr-border);margin:8px 0;}
 
   /* Test cases */
-  .cr-tc{display:flex;flex-direction:column;max-height:180px;}
+  .cr-tc{display:flex;flex-direction:column;height:100%;}
   .cr-tc-tabs{display:flex;align-items:center;gap:4px;padding:8px 12px 0;overflow-x:auto;flex-shrink:0;}
   .cr-tc-tab{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--cr-dim);background:none;border:1px solid transparent;border-bottom:none;padding:6px 12px;border-radius:8px 8px 0 0;cursor:pointer;flex-shrink:0;transition:color .2s;}
   .cr-tc-tab:hover{color:var(--cr-text);}
@@ -190,11 +201,21 @@ export const ROOM_CSS = `
   .cr-tc-hidden{font-size:11px;color:var(--cr-dimmer);}
 
   /* Right column (video + copilot) */
-  .cr-room-rightcol{width:320px;background:var(--cr-panel);border-left:1px solid var(--cr-border);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;}
-  .cr-room-video-slot{flex-shrink:0;}
-  .cr-room-video-slot.lead{height:384px;}
-  .cr-room-video-slot.full{flex:1;}
-  .cr-room-ai-slot{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+  /* Right region — modes: video-only (candidate), ai-only (interviewer, video off),
+     split (interviewer with video → video BESIDE AI so neither is hidden) */
+  .cr-room-rightcol{background:var(--cr-panel);border-left:1px solid var(--cr-border);flex-shrink:0;display:flex;overflow:hidden;}
+  .cr-room-rightcol.mode-video-only{flex-direction:column;width:320px;}
+  .cr-room-rightcol.mode-ai-only{flex-direction:column;width:340px;}
+  .cr-room-rightcol.mode-split{flex-direction:row;width:560px;}
+  .cr-room-rightcol.mode-collapsed{display:none;}
+  .cr-room-video-slot{min-height:0;overflow:hidden;}
+  .cr-room-video-slot.hidden,.cr-room-ai-slot.hidden{display:none;}
+  .cr-room-rightcol.mode-video-only .cr-room-video-slot{flex:1;}
+  .cr-room-rightcol.mode-split .cr-room-video-slot{width:220px;flex-shrink:0;border-right:1px solid var(--cr-border);}
+  .cr-room-ai-slot{display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+  .cr-room-rightcol.mode-ai-only .cr-room-ai-slot{flex:1;}
+  .cr-room-rightcol.mode-split .cr-room-ai-slot{flex:1;min-width:0;}
+  @media(max-width:1200px){.cr-room-rightcol.mode-split{width:460px;}.cr-room-rightcol.mode-split .cr-room-video-slot{width:180px;}}
 
   /* Video panel */
   .cr-vid{height:100%;display:flex;flex-direction:column;background:var(--cr-panel);}
@@ -328,6 +349,7 @@ const InterviewRoom = () => {
   const [participants, setParticipants] = useState([]);
   const [showQuestion, setShowQuestion] = useState(true);
   const [showVideo, setShowVideo] = useState(true);
+  const [showAI, setShowAI] = useState(true);
   const starterCodeMapRef = useRef(null); // per-language starter codes from the loaded question
   const codesPerLanguageRef = useRef({}); // per-language code retention across language switches
   const autoSaveRef = useRef(null);
@@ -341,6 +363,13 @@ const InterviewRoom = () => {
   const showScoreModalRef = useRef(false);
 
   const [interviewStartedAt, setInterviewStartedAt] = useState(null);
+
+  // Resizable panels (LeetCode-style). Widths/heights in px, dragged via the
+  // handles between panels. Purely presentational — no effect on room logic.
+  const [questionWidth, setQuestionWidth] = useState(340);
+  const [outputHeight, setOutputHeight] = useState(240);
+  const [qDragging, setQDragging] = useState(false);
+  const [outDragging, setOutDragging] = useState(false);
 
   const socketRef = useRef(null);
 
@@ -419,8 +448,16 @@ const InterviewRoom = () => {
         setIsConnected(true);
         toast.success("Connected to room");
 
-        if (state.startedAt) setInterviewStartedAt(state.startedAt);
-        else setInterviewStartedAt(new Date().toISOString());
+        // Timer persistence: prefer the server's authoritative startedAt; if it
+        // isn't sent, reuse a per-room value stashed in localStorage so a refresh
+        // doesn't reset the clock. Only the very first mount falls back to "now".
+        const STARTED_KEY = `cr-room-started-${roomId}`;
+        let startedAt = state.startedAt;
+        if (!startedAt) {
+          startedAt = localStorage.getItem(STARTED_KEY) || new Date().toISOString();
+        }
+        localStorage.setItem(STARTED_KEY, startedAt);
+        setInterviewStartedAt(startedAt);
 
         // Seed per-language code map with the persisted code so that after a
         // refresh the user can switch away and back without losing their work.
@@ -661,6 +698,8 @@ const InterviewRoom = () => {
       const socket = getSocket();
       socket?.emit(SOCKET_EVENTS.ROOM_CLOSE, { roomId });
 
+      localStorage.removeItem(`cr-room-started-${roomId}`);
+
       // Set both state and ref
       setShowScoreModal(true);
       showScoreModalRef.current = true;
@@ -673,7 +712,56 @@ const InterviewRoom = () => {
   const handleLeaveRoom = () => {
     const socket = getSocket();
     socket?.emit(SOCKET_EVENTS.ROOM_LEAVE, { roomId });
+    localStorage.removeItem(`cr-room-started-${roomId}`);
     navigate("/dashboard");
+  };
+
+  // ─── Panel resizers ─────────────────────────────────────────────────────
+  // Question panel: drag the handle left/right to grow the editor.
+  const startQuestionDrag = (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = questionWidth;
+    setQDragging(true);
+    const onMove = (ev) => {
+      const next = Math.min(640, Math.max(240, startW + (ev.clientX - startX)));
+      setQuestionWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setQDragging(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  // Output panel: drag the handle up/down (terminal / test cases), LeetCode-style.
+  const startOutputDrag = (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = outputHeight;
+    setOutDragging(true);
+    const onMove = (ev) => {
+      // Dragging up (smaller clientY) grows the output.
+      const next = Math.min(560, Math.max(120, startH - (ev.clientY - startY)));
+      setOutputHeight(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setOutDragging(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
   };
 
   // ─── Loading state ────────────────────────────────────────────────────────
@@ -754,6 +842,16 @@ const InterviewRoom = () => {
             {showVideo ? "Hide" : "Show"} Video
           </button>
 
+          {/* Toggle AI copilot — interviewer only */}
+          {isInterviewer() && (
+            <button
+              onClick={() => setShowAI(!showAI)}
+              className="cr-room-btn cr-room-btn-ghost"
+            >
+              {showAI ? "Hide" : "Show"} AI
+            </button>
+          )}
+
           {/* End interview — interviewer only */}
           {isInterviewer() && (
             <button onClick={handleEndInterview} className="cr-room-btn cr-room-btn-danger">
@@ -772,7 +870,8 @@ const InterviewRoom = () => {
       <div className="cr-room-main">
         {/* Question panel */}
         {showQuestion && question && (
-          <div className="cr-room-qpanel">
+          <>
+          <div className="cr-room-qpanel" style={{ width: questionWidth }}>
             {/* Header */}
             <div className="cr-room-qhead">
               <div className="cr-room-qhead-row">
@@ -827,48 +926,85 @@ const InterviewRoom = () => {
               </div>
             </div>
           </div>
+          <div
+            className={`cr-room-hresizer${qDragging ? " dragging" : ""}`}
+            onMouseDown={startQuestionDrag}
+            title="Drag to resize"
+          />
+          </>
         )}
 
         {/* Editor */}
         <div className="cr-room-editor-col">
-          <CodeEditor
-            code={currentCode}
-            language={language}
-            onChange={handleCodeChange}
-            roomId={roomId}
-            isRemoteChange={isRemoteChange}
-          />
-
-          {/* ── Output panel — Terminal + Test Cases ─────────────────────────── */}
-          {(executionResult || isExecuting) && (
-            <OutputPanel
-              executionResult={executionResult}
-              isExecuting={isExecuting}
+          <div className="cr-room-editor-area">
+            <CodeEditor
+              code={currentCode}
+              language={language}
+              onChange={handleCodeChange}
+              roomId={roomId}
+              isRemoteChange={isRemoteChange}
             />
-          )}
-        </div>
+          </div>
 
-        {/* Right panel — Video + AI Copilot */}
-        <div className="cr-room-rightcol">
-          {/* Video panel */}
-          {showVideo && (
-            <div className={`cr-room-video-slot ${isInterviewer() ? "lead" : "full"}`}>
-              <VideoPanel
-                roomId={roomId}
-                participants={participants}
-                isLeadInterviewer={isLeadInterviewer}
-                interviewId={interviewId}
+          {/* ── Output panel — Terminal + Test Cases (resizable) ──────────────── */}
+          {(executionResult || isExecuting) && (
+            <>
+              <div
+                className={`cr-room-vresizer${outDragging ? " dragging" : ""}`}
+                onMouseDown={startOutputDrag}
+                title="Drag to resize"
               />
-            </div>
-          )}
-
-          {/* AI Copilot — interviewer only */}
-          {isInterviewer() && (
-            <div className="cr-room-ai-slot">
-              <AICopilotPanel />
-            </div>
+              <div className="cr-room-output-wrap" style={{ height: outputHeight }}>
+                <OutputPanel
+                  executionResult={executionResult}
+                  isExecuting={isExecuting}
+                />
+              </div>
+            </>
           )}
         </div>
+
+        {/* Right region — video and AI stay MOUNTED at all times; toggling
+            "Hide" only hides them via CSS. Unmounting VideoPanel would run its
+            cleanup (closing peer connections + stopping the camera), which is
+            what previously blocked the other participant from seeing the feed. */}
+        {(() => {
+          const interviewer = isInterviewer();
+          const videoVisible = showVideo;
+          const aiVisible = interviewer && showAI;
+          const mode =
+            videoVisible && aiVisible
+              ? "split"
+              : aiVisible
+                ? "ai-only"
+                : videoVisible
+                  ? "video-only"
+                  : "collapsed";
+
+          // Everyone keeps VideoPanel mounted so hiding never stops the camera
+          // or drops peers. When nothing is visible the region collapses via
+          // CSS (display:none) but the panel stays mounted underneath.
+          return (
+            <div className={`cr-room-rightcol mode-${mode}`}>
+              {/* Video panel — always mounted, hidden via CSS when toggled off */}
+              <div className={`cr-room-video-slot${videoVisible ? "" : " hidden"}`}>
+                <VideoPanel
+                  roomId={roomId}
+                  participants={participants}
+                  isLeadInterviewer={isLeadInterviewer}
+                  interviewId={interviewId}
+                />
+              </div>
+
+              {/* AI Copilot — interviewer only; mounted so chat history survives */}
+              {interviewer && (
+                <div className={`cr-room-ai-slot${aiVisible ? "" : " hidden"}`}>
+                  <AICopilotPanel />
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Room controls — bottom bar */}
