@@ -72,67 +72,48 @@ const RoomControls = ({ roomId, code, language, question }) => {
     <>
       {/* Question picker modal */}
       {showQuestionPicker && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-[#161b22] border border-[#30363d] rounded-xl w-full max-w-lg mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-[#30363d]">
-              <h3 className="text-white font-semibold">Select Question</h3>
+        <div className="cr-rc-modal-overlay">
+          <div className="cr-rc-modal">
+            <div className="cr-rc-modal-head">
+              <h3>Select Question</h3>
               <button
                 onClick={() => setShowQuestionPicker(false)}
-                className="text-[#8b949e] hover:text-white transition-colors"
+                className="cr-rc-modal-close"
               >
                 ✕
               </button>
             </div>
-            <div className="p-4 max-h-96 overflow-y-auto">
+            <div className="cr-rc-modal-body">
               {loadingQuestions ? (
-                <div className="flex justify-center py-8">
-                  <svg
-                    className="animate-spin h-6 w-6 text-[#238636]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v8z"
-                    />
+                <div className="cr-rc-modal-loading">
+                  <svg className="cr-spin" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <circle className="op25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="op75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="cr-rc-qlist">
                   {questions.map((q) => (
                     <button
                       key={q.id}
                       onClick={() => handleSelectQuestion(q.id)}
-                      className="w-full text-left bg-[#0d1117] hover:bg-[#21262d] border border-[#30363d] hover:border-[#484f58] rounded-lg p-3 transition-colors"
+                      className="cr-rc-qitem"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-white text-sm font-medium">
-                          {q.title}
-                        </span>
+                      <div className="cr-rc-qitem-row">
+                        <span className="cr-rc-qitem-title">{q.title}</span>
                         <span
-                          className={`text-xs px-2 py-0.5 rounded-full ${
+                          className={`cr-room-qdiff ${
                             q.difficulty === "EASY"
-                              ? "text-[#3fb950] bg-[#1a2f1a]"
+                              ? "easy"
                               : q.difficulty === "MEDIUM"
-                                ? "text-[#d29922] bg-[#2d1f00]"
-                                : "text-[#f85149] bg-[#2d1318]"
+                                ? "medium"
+                                : "hard"
                           }`}
                         >
                           {q.difficulty}
                         </span>
                       </div>
-                      {q.tags && (
-                        <p className="text-xs text-[#484f58] mt-1">{q.tags}</p>
-                      )}
+                      {q.tags && <p className="cr-rc-qtags">{q.tags}</p>}
                     </button>
                   ))}
                 </div>
@@ -143,19 +124,19 @@ const RoomControls = ({ roomId, code, language, question }) => {
       )}
 
       {/* Bottom controls bar */}
-      <div className="bg-[#161b22] border-t border-[#30363d] px-4 py-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[#484f58]">
+      <div className="cr-rc-bar">
+        <div>
+          <span className="cr-rc-save">
             {isSaved ? "✓ Saved" : "Auto-saves every 10s"}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="cr-rc-actions">
           {/* Load question — interviewer only */}
           {isInterviewer() && (
             <button
               onClick={handleOpenQuestionPicker}
-              className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] hover:border-[#484f58] px-3 py-1.5 rounded-lg transition-colors"
+              className="cr-room-btn cr-room-btn-ghost"
             >
               Load Question
             </button>
@@ -165,28 +146,13 @@ const RoomControls = ({ roomId, code, language, question }) => {
           <button
             onClick={handleRunCode}
             disabled={isExecuting || isSubmitting}
-            className="text-xs bg-[#21262d] hover:bg-[#30363d] disabled:opacity-50 disabled:cursor-not-allowed text-[#8b949e] hover:text-white border border-[#30363d] px-4 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5"
+            className="cr-room-btn cr-room-btn-ghost"
           >
             {isExecuting && !isSubmitting ? (
               <>
-                <svg
-                  className="animate-spin h-3 w-3"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8z"
-                  />
+                <svg className="cr-spin" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <circle className="op25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="op75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
                 Running...
               </>
@@ -199,28 +165,13 @@ const RoomControls = ({ roomId, code, language, question }) => {
           <button
             onClick={handleSubmit}
             disabled={isExecuting || isSubmitting}
-            className="text-xs bg-[#238636] hover:bg-[#2ea043] disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-lg transition-colors font-medium flex items-center gap-1.5"
+            className="cr-room-btn cr-room-btn-primary"
           >
             {isSubmitting ? (
               <>
-                <svg
-                  className="animate-spin h-3 w-3"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8v8z"
-                  />
+                <svg className="cr-spin" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <circle className="op25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="op75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
                 Submitting...
               </>

@@ -20,26 +20,29 @@ const getLanguageExtension = (language) => {
     }
 };
 
+// Editor chrome retuned to the cr- token palette (near-black bg, cr border/gutter
+// colors) so the surface matches the rest of the room. Syntax highlighting still
+// comes from oneDark.
 const customTheme = EditorView.theme({
-    '&': { height: '100%', fontSize: '14px', backgroundColor: '#1e1e1e' },
+    '&': { height: '100%', fontSize: '14px', backgroundColor: '#0d1117' },
     '.cm-scroller': {
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
         lineHeight: '1.6',
         overflow: 'auto',
     },
-    '.cm-content': { padding: '16px 0', caretColor: '#aeafad' },
+    '.cm-content': { padding: '16px 0', caretColor: '#3fb950' },
     '.cm-line': { padding: '0 16px' },
     '.cm-gutters': {
-        backgroundColor: '#1e1e1e',
-        borderRight: '1px solid #3e3e42',
-        color: '#858585',
+        backgroundColor: '#0a0e14',
+        borderRight: '1px solid #2a323d',
+        color: '#5c6773',
         minWidth: '48px',
     },
-    '.cm-activeLineGutter': { backgroundColor: '#2a2d2e' },
-    '.cm-activeLine': { backgroundColor: '#2a2d2e' },
-    '.cm-cursor': { borderLeftColor: '#aeafad', borderLeftWidth: '2px' },
-    '.cm-selectionBackground': { backgroundColor: '#264f78 !important' },
-    '&.cm-focused .cm-selectionBackground': { backgroundColor: '#264f78 !important' },
+    '.cm-activeLineGutter': { backgroundColor: '#161b22' },
+    '.cm-activeLine': { backgroundColor: '#161b22' },
+    '.cm-cursor': { borderLeftColor: '#3fb950', borderLeftWidth: '2px' },
+    '.cm-selectionBackground': { backgroundColor: '#1c3a5e !important' },
+    '&.cm-focused .cm-selectionBackground': { backgroundColor: '#1c3a5e !important' },
 });
 
 const CodeEditor = ({ code, language, onChange, isRemoteChange }) => {
@@ -92,16 +95,16 @@ const CodeEditor = ({ code, language, onChange, isRemoteChange }) => {
     }, []);
 
     return (
-        <div className="flex-1 overflow-hidden flex flex-col bg-[#1e1e1e]">
-            <div className="bg-[#252526] border-b border-[#3e3e42] px-4 py-1.5 flex items-center gap-3 shrink-0">
-                <div className="flex items-center gap-2 bg-[#1e1e1e] px-3 py-1 rounded-t border-t-2 border-t-[#238636]">
-                    <div className="w-2 h-2 rounded-full bg-[#238636]"/>
-                    <span className="text-xs text-white font-mono">
+        <div className="cr-room-editor">
+            <div className="cr-room-editor-bar">
+                <div className="cr-room-editor-tab">
+                    <div className="cr-room-editor-tab-dot" />
+                    <span>
                         {LANGUAGES.find(l => l.value === language)?.label || language}
                     </span>
                 </div>
             </div>
-            <div className="flex-1 overflow-hidden">
+            <div className="cr-room-editor-body">
                 <CodeMirror
                     value={code}
                     height="100%"

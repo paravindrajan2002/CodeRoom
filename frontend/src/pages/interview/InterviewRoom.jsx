@@ -24,6 +24,266 @@ import VideoPanel from "../../components/video/VideoPanel.jsx";
 import RoomControls from "../../components/room/RoomControls.jsx";
 import ScoreModal from "../../components/room/ScoreModal.jsx";
 import AICopilotPanel from "../../components/room/AICopilotPanel.jsx";
+import InterviewTimer from "../../components/room/InterviewTimer.jsx";
+import OutputPanel from "../../components/room/OutputPanel.jsx";
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Shared interview-room design system — same tokens/fonts/treatments as the
+   Landing, auth, and dashboard screens (cr- system), scoped under .cr-room-root.
+   InterviewRoom injects this once; the room's child components (CodeEditor,
+   VideoPanel, RoomControls, AICopilotPanel, InterviewTimer, OutputPanel) all
+   render inside .cr-room-root and just use the classes. ScoreModal is the one
+   exception — it carries its own styles because it also renders from Dashboard.
+   ──────────────────────────────────────────────────────────────────────────── */
+export const ROOM_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  .cr-room-root{
+    --cr-bg:#0a0e14; --cr-bg2:#0d1117; --cr-panel:#161b22; --cr-panel2:#1c232d;
+    --cr-border:#2a323d; --cr-border2:#3a444f; --cr-text:#e6edf3; --cr-dim:#8b949e;
+    --cr-dimmer:#5c6773; --cr-green:#3fb950; --cr-green2:#238636; --cr-blue:#58a6ff;
+    --cr-purple:#bc8cff; --cr-yellow:#d29922; --cr-red:#f85149; --cr-danger2:#da3633;
+    --cr-mono:'JetBrains Mono',ui-monospace,monospace;
+    --cr-display:'Space Grotesk','Segoe UI',sans-serif;
+    --cr-body:'Inter',system-ui,sans-serif;
+    height:100vh; display:flex; flex-direction:column; overflow:hidden;
+    background:var(--cr-bg); color:var(--cr-text); font-family:var(--cr-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  .cr-room-root *{margin:0;padding:0;box-sizing:border-box;}
+  .cr-room-root ::selection{background:rgba(63,185,80,0.3);}
+  .cr-spin{animation:cr-room-spin 1s linear infinite;}
+  .op25{opacity:.25;} .op75{opacity:.75;}
+  @keyframes cr-room-spin{to{transform:rotate(360deg);}}
+  @keyframes cr-room-pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+  /* Shared buttons */
+  .cr-room-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:var(--cr-body);font-weight:500;font-size:12px;border-radius:9px;cursor:pointer;border:1px solid transparent;transition:all .2s;white-space:nowrap;}
+  .cr-room-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .cr-room-btn-ghost{background:var(--cr-panel2);border-color:var(--cr-border);color:var(--cr-dim);padding:6px 12px;}
+  .cr-room-btn-ghost:hover:not(:disabled){color:var(--cr-text);border-color:var(--cr-border2);}
+  .cr-room-btn-primary{background:var(--cr-green2);color:#fff;padding:6px 14px;font-weight:600;}
+  .cr-room-btn-primary:hover:not(:disabled){background:var(--cr-green);box-shadow:0 0 20px rgba(63,185,80,0.35);}
+  .cr-room-btn-danger{background:var(--cr-danger2);color:#fff;padding:6px 14px;font-weight:600;}
+  .cr-room-btn-danger:hover:not(:disabled){background:var(--cr-red);}
+
+  /* Top bar */
+  .cr-room-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--cr-panel);border-bottom:1px solid var(--cr-border);padding:8px 16px;flex-shrink:0;}
+  .cr-room-topbar-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .cr-room-topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .cr-room-logo{font-family:var(--cr-display);font-weight:700;font-size:14px;letter-spacing:-0.01em;}
+  .cr-room-logo b{color:var(--cr-green);font-weight:700;}
+  .cr-room-sep{color:var(--cr-border2);}
+  .cr-room-live{display:flex;align-items:center;gap:6px;}
+  .cr-room-live-dot{width:8px;height:8px;border-radius:50%;background:var(--cr-green);animation:cr-room-pulse 1.6s infinite;}
+  .cr-room-live span{font-size:12px;color:var(--cr-dim);}
+  .cr-room-chips{display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+  .cr-room-chip{font-family:var(--cr-mono);font-size:11px;color:var(--cr-dim);background:var(--cr-panel2);border:1px solid var(--cr-border);padding:2px 8px;border-radius:100px;}
+  .cr-room-timer-wrap{display:flex;align-items:center;background:var(--cr-panel2);border:1px solid var(--cr-border);padding:4px 8px;border-radius:8px;}
+  .cr-timer{display:flex;align-items:center;gap:4px;font-family:var(--cr-mono);font-size:12px;}
+  .cr-room-select{background:var(--cr-panel2);border:1px solid var(--cr-border);color:var(--cr-text);font-family:var(--cr-body);font-size:12px;padding:6px 10px;border-radius:9px;cursor:pointer;transition:border-color .2s;}
+  .cr-room-select:focus{outline:none;border-color:var(--cr-green);}
+  .cr-room-select option{background:var(--cr-panel);color:var(--cr-text);}
+
+  /* Loading */
+  .cr-room-loading{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--cr-bg);}
+  .cr-room-loading .box{text-align:center;}
+  .cr-room-loading .cr-spin{color:var(--cr-green);margin:0 auto 16px;}
+  .cr-room-loading p{color:var(--cr-dim);font-size:14px;}
+
+  /* Main layout */
+  .cr-room-main{display:flex;flex:1;overflow:hidden;}
+
+  /* Question panel */
+  .cr-room-qpanel{width:320px;background:var(--cr-panel);border-right:1px solid var(--cr-border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+  .cr-room-qhead{padding:16px;border-bottom:1px solid var(--cr-border);flex-shrink:0;}
+  .cr-room-qhead-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+  .cr-room-qtitle{font-family:var(--cr-display);font-weight:600;font-size:14px;line-height:1.3;}
+  .cr-room-qdiff{font-family:var(--cr-mono);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:3px 8px;border-radius:100px;flex-shrink:0;}
+  .cr-room-qdiff.easy{color:var(--cr-green);background:rgba(63,185,80,0.12);}
+  .cr-room-qdiff.medium{color:var(--cr-yellow);background:rgba(210,153,34,0.12);}
+  .cr-room-qdiff.hard{color:var(--cr-red);background:rgba(248,81,73,0.12);}
+  .cr-room-qtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;}
+  .cr-room-qtag{font-family:var(--cr-mono);font-size:10px;color:var(--cr-blue);background:var(--cr-panel2);padding:2px 7px;border-radius:6px;}
+  .cr-room-qbody{flex:1;overflow-y:auto;padding:16px;}
+
+  /* Markdown (question description) */
+  .cr-room-md{font-size:13px;color:var(--cr-dim);line-height:1.65;}
+  .cr-room-md p{margin-bottom:12px;}
+  .cr-room-md strong{color:var(--cr-text);font-weight:600;}
+  .cr-room-md em{font-style:italic;}
+  .cr-room-md ul,.cr-room-md ol{margin:0 0 12px;padding-left:20px;}
+  .cr-room-md li{margin-bottom:4px;}
+  .cr-room-md h1{color:var(--cr-text);font-family:var(--cr-display);font-weight:700;font-size:15px;margin-bottom:8px;}
+  .cr-room-md h2{color:var(--cr-text);font-family:var(--cr-display);font-weight:600;font-size:14px;margin-bottom:8px;}
+  .cr-room-md h3{color:var(--cr-dim);font-weight:600;font-size:13px;margin-bottom:4px;}
+  .cr-room-md blockquote{border-left:2px solid var(--cr-green);padding-left:12px;margin:12px 0;font-style:italic;}
+  .cr-room-md hr{border:none;border-top:1px solid var(--cr-border);margin:16px 0;}
+  .cr-room-md a{color:var(--cr-blue);text-decoration:none;}
+  .cr-room-md a:hover{text-decoration:underline;}
+  .cr-room-md img{border-radius:10px;max-width:100%;margin:12px 0;border:1px solid var(--cr-border);}
+  .cr-room-md table{width:100%;font-size:11px;border-collapse:collapse;margin:12px 0;}
+  .cr-room-md th{border:1px solid var(--cr-border);background:var(--cr-panel2);color:var(--cr-text);padding:6px 12px;text-align:left;}
+  .cr-room-md td{border:1px solid var(--cr-border);padding:6px 12px;}
+  .cr-md-code-inline{background:var(--cr-panel2);color:var(--cr-blue);padding:2px 6px;border-radius:5px;font-size:11px;font-family:var(--cr-mono);}
+  .cr-md-code-block{background:var(--cr-bg2);border:1px solid var(--cr-border);border-radius:10px;padding:12px;margin:12px 0;overflow-x:auto;}
+  .cr-md-code-block code{font-size:11px;font-family:var(--cr-mono);color:var(--cr-text);}
+
+  /* Editor column */
+  .cr-room-editor-col{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+  /* Editor chrome */
+  .cr-room-editor{flex:1;overflow:hidden;display:flex;flex-direction:column;background:var(--cr-bg2);}
+  .cr-room-editor-bar{background:var(--cr-panel);border-bottom:1px solid var(--cr-border);padding:6px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+  .cr-room-editor-tab{display:flex;align-items:center;gap:8px;background:var(--cr-bg2);padding:5px 12px;border-radius:8px 8px 0 0;border-top:2px solid var(--cr-green2);}
+  .cr-room-editor-tab-dot{width:8px;height:8px;border-radius:50%;background:var(--cr-green2);}
+  .cr-room-editor-tab span{font-family:var(--cr-mono);font-size:12px;color:var(--cr-text);}
+  .cr-room-editor-body{flex:1;overflow:hidden;}
+
+  /* Output panel */
+  .cr-out{background:var(--cr-panel);border-top:1px solid var(--cr-border);flex-shrink:0;display:flex;flex-direction:column;height:220px;}
+  .cr-out-bar{display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid var(--cr-border);flex-shrink:0;}
+  .cr-out-tabs{display:flex;align-items:center;}
+  .cr-out-tab{display:flex;align-items:center;font-family:var(--cr-body);font-size:12px;font-weight:500;color:var(--cr-dim);background:none;border:none;border-bottom:2px solid transparent;padding:8px 12px;cursor:pointer;transition:color .2s;}
+  .cr-out-tab:hover{color:var(--cr-text);}
+  .cr-out-tab.active{color:var(--cr-text);border-bottom-color:var(--cr-green2);}
+  .cr-out-badge{margin-left:6px;font-family:var(--cr-mono);font-size:11px;padding:1px 7px;border-radius:100px;}
+  .cr-out-badge.ok{background:rgba(63,185,80,0.14);color:var(--cr-green);}
+  .cr-out-badge.bad{background:rgba(248,81,73,0.14);color:var(--cr-red);}
+  .cr-out-tab-dot{margin-left:6px;width:6px;height:6px;background:var(--cr-red);border-radius:50%;display:inline-block;}
+  .cr-out-status{display:flex;align-items:center;gap:8px;}
+  .cr-out-runbadge{font-family:var(--cr-mono);font-size:11px;background:var(--cr-panel2);color:var(--cr-dim);padding:1px 8px;border-radius:100px;border:1px solid var(--cr-border);}
+  .cr-out-subbadge{font-family:var(--cr-mono);font-size:11px;background:rgba(88,166,255,0.12);color:var(--cr-blue);padding:1px 8px;border-radius:100px;border:1px solid rgba(88,166,255,0.4);}
+  .cr-out-verdict{font-size:12px;font-weight:600;}
+  .cr-out-time{font-family:var(--cr-mono);font-size:11px;color:var(--cr-dimmer);}
+  .cr-out-body{flex:1;overflow:hidden;}
+  .cr-out-loading{height:100%;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--cr-dim);font-size:12px;}
+  .cr-out-loading .cr-spin{color:var(--cr-green2);}
+  .cr-out-empty{height:100%;display:flex;align-items:center;justify-content:center;}
+  .cr-out-empty p{font-size:12px;color:var(--cr-dimmer);}
+
+  /* Terminal */
+  .cr-term{height:100%;overflow-y:auto;background:var(--cr-bg2);padding:12px;font-family:var(--cr-mono);}
+  .cr-term-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--cr-border);}
+  .cr-term-dots{display:flex;gap:5px;}
+  .cr-term-dots span{width:10px;height:10px;border-radius:50%;}
+  .cr-term-label{font-size:11px;color:var(--cr-dimmer);}
+  .cr-term-empty{font-size:12px;color:var(--cr-dimmer);}
+  .cr-term-summary{font-size:11px;color:var(--cr-dim);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--cr-border);}
+  .cr-term-out{font-size:11px;color:var(--cr-text);white-space:pre-wrap;line-height:1.6;}
+  .cr-term-err{font-size:11px;color:var(--cr-red);white-space:pre-wrap;line-height:1.6;}
+  .cr-term-divider{border-top:1px solid var(--cr-border);margin:8px 0;}
+
+  /* Test cases */
+  .cr-tc{display:flex;flex-direction:column;max-height:180px;}
+  .cr-tc-tabs{display:flex;align-items:center;gap:4px;padding:8px 12px 0;overflow-x:auto;flex-shrink:0;}
+  .cr-tc-tab{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--cr-dim);background:none;border:1px solid transparent;border-bottom:none;padding:6px 12px;border-radius:8px 8px 0 0;cursor:pointer;flex-shrink:0;transition:color .2s;}
+  .cr-tc-tab:hover{color:var(--cr-text);}
+  .cr-tc-tab.active{background:var(--cr-bg2);color:var(--cr-text);border-color:var(--cr-border);}
+  .cr-tc-dot{font-size:10px;}
+  .cr-tc-detail{flex:1;overflow-y:auto;background:var(--cr-bg2);padding:12px;display:flex;flex-direction:column;gap:12px;}
+  .cr-tc-label{font-size:11px;color:var(--cr-dimmer);margin-bottom:4px;}
+  .cr-tc-pre{font-size:11px;font-family:var(--cr-mono);color:var(--cr-text);background:var(--cr-panel);border-radius:8px;padding:8px 12px;white-space:pre-wrap;}
+  .cr-tc-pre.expected{color:var(--cr-green);}
+  .cr-tc-pre.ok{color:var(--cr-green);}
+  .cr-tc-pre.bad{color:var(--cr-red);}
+  .cr-tc-hidden{font-size:11px;color:var(--cr-dimmer);}
+
+  /* Right column (video + copilot) */
+  .cr-room-rightcol{width:320px;background:var(--cr-panel);border-left:1px solid var(--cr-border);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;}
+  .cr-room-video-slot{flex-shrink:0;}
+  .cr-room-video-slot.lead{height:384px;}
+  .cr-room-video-slot.full{flex:1;}
+  .cr-room-ai-slot{flex:1;overflow:hidden;display:flex;flex-direction:column;}
+
+  /* Video panel */
+  .cr-vid{height:100%;display:flex;flex-direction:column;background:var(--cr-panel);}
+  .cr-vid-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--cr-border);}
+  .cr-vid-live{display:flex;align-items:center;gap:6px;}
+  .cr-vid-live-dot{width:6px;height:6px;border-radius:50%;background:var(--cr-green);animation:cr-room-pulse 1.6s infinite;}
+  .cr-vid-count{font-size:12px;color:var(--cr-dim);font-weight:500;}
+  .cr-vid-ctrls{display:flex;align-items:center;gap:4px;}
+  .cr-vid-ctrl{padding:6px;border-radius:8px;font-size:12px;background:var(--cr-panel2);border:1px solid var(--cr-border);color:var(--cr-dim);cursor:pointer;transition:all .2s;line-height:1;}
+  .cr-vid-ctrl:hover{color:var(--cr-text);}
+  .cr-vid-ctrl.danger{background:var(--cr-danger2);border-color:var(--cr-danger2);color:#fff;}
+  .cr-vid-body{flex:1;padding:8px;overflow-y:auto;}
+  .cr-vid-waiting{display:flex;align-items:center;justify-content:center;background:var(--cr-bg2);border-radius:10px;padding:12px;margin-bottom:6px;text-align:center;}
+  .cr-vid-waiting-ico{width:32px;height:32px;background:var(--cr-panel2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;font-size:16px;}
+  .cr-vid-waiting p{font-size:12px;color:var(--cr-dimmer);}
+  .cr-vid-grid{display:grid;gap:6px;}
+  .cr-vid-grid.cols1{grid-template-columns:1fr;}
+  .cr-vid-grid.cols2{grid-template-columns:1fr 1fr;}
+  .cr-vid-tile{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--cr-bg2);}
+  .cr-vid-video{width:100%;height:100%;object-fit:cover;}
+  .cr-vid-label{position:absolute;bottom:4px;left:8px;font-size:11px;color:#fff;background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:5px;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .cr-vid-mute{position:absolute;bottom:4px;right:8px;font-size:11px;background:var(--cr-danger2);padding:2px 6px;border-radius:5px;}
+  .cr-vid-avatar-wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--cr-bg2);}
+  .cr-vid-avatar{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;font-family:var(--cr-display);margin-bottom:4px;user-select:none;}
+  .cr-vid-avatar-sub{font-size:11px;color:var(--cr-dimmer);}
+  .cr-vid-rec{padding:8px;border-top:1px solid var(--cr-border);display:flex;flex-direction:column;gap:6px;}
+  .cr-vid-rec-uploading{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--cr-dim);padding:6px 0;}
+  .cr-vid-rec-active{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--cr-red);padding:2px 0;}
+  .cr-vid-rec-dot{width:8px;height:8px;border-radius:50%;background:var(--cr-red);animation:cr-room-pulse 1.6s infinite;}
+  .cr-vid-rec-btn{width:100%;font-size:12px;padding:8px;border-radius:9px;font-weight:600;font-family:var(--cr-body);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .2s;}
+  .cr-vid-rec-btn.start{background:var(--cr-panel2);border:1px solid var(--cr-border);color:var(--cr-dim);}
+  .cr-vid-rec-btn.start:hover{color:var(--cr-text);border-color:var(--cr-border2);}
+  .cr-vid-rec-btn.stop{background:var(--cr-danger2);border:1px solid var(--cr-danger2);color:#fff;}
+  .cr-vid-rec-btn.stop:hover{background:var(--cr-red);}
+
+  /* Room controls (bottom bar + question picker) */
+  .cr-rc-bar{display:flex;align-items:center;justify-content:space-between;background:var(--cr-panel);border-top:1px solid var(--cr-border);padding:8px 16px;flex-shrink:0;}
+  .cr-rc-save{font-family:var(--cr-mono);font-size:11px;color:var(--cr-dimmer);}
+  .cr-rc-actions{display:flex;align-items:center;gap:8px;}
+  .cr-rc-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
+  .cr-rc-modal{background:var(--cr-panel);border:1px solid var(--cr-border);border-radius:16px;width:100%;max-width:512px;}
+  .cr-rc-modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid var(--cr-border);}
+  .cr-rc-modal-head h3{font-family:var(--cr-display);font-weight:600;font-size:15px;}
+  .cr-rc-modal-close{background:none;border:none;color:var(--cr-dim);cursor:pointer;font-size:14px;transition:color .2s;}
+  .cr-rc-modal-close:hover{color:var(--cr-text);}
+  .cr-rc-modal-body{padding:16px;max-height:384px;overflow-y:auto;}
+  .cr-rc-modal-loading{display:flex;justify-content:center;padding:32px 0;}
+  .cr-rc-modal-loading .cr-spin{color:var(--cr-green2);}
+  .cr-rc-qlist{display:flex;flex-direction:column;gap:8px;}
+  .cr-rc-qitem{width:100%;text-align:left;background:var(--cr-bg2);border:1px solid var(--cr-border);border-radius:10px;padding:12px;cursor:pointer;transition:all .2s;}
+  .cr-rc-qitem:hover{background:var(--cr-panel2);border-color:var(--cr-border2);}
+  .cr-rc-qitem-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .cr-rc-qitem-title{color:var(--cr-text);font-size:14px;font-weight:500;}
+  .cr-rc-qtags{font-family:var(--cr-mono);font-size:11px;color:var(--cr-dimmer);margin-top:4px;}
+
+  /* AI Copilot */
+  .cr-ai{display:flex;flex-direction:column;height:100%;background:var(--cr-panel);}
+  .cr-ai-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--cr-border);flex-shrink:0;}
+  .cr-ai-head-title{font-size:12px;font-weight:500;color:var(--cr-dim);}
+  .cr-ai-badge{margin-left:auto;font-family:var(--cr-mono);font-size:11px;color:var(--cr-green);background:rgba(63,185,80,0.12);padding:2px 8px;border-radius:100px;}
+  .cr-ai-actions{padding:8px;border-bottom:1px solid var(--cr-border);flex-shrink:0;display:flex;flex-wrap:wrap;gap:5px;}
+  .cr-ai-action{font-size:11px;background:var(--cr-panel2);border:1px solid var(--cr-border);color:var(--cr-dim);padding:4px 9px;border-radius:8px;cursor:pointer;transition:all .2s;}
+  .cr-ai-action:hover:not(:disabled){color:var(--cr-text);border-color:var(--cr-border2);}
+  .cr-ai-action:disabled{opacity:.5;cursor:not-allowed;}
+  .cr-ai-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px;min-height:0;}
+  .cr-ai-row{display:flex;}
+  .cr-ai-row.user{justify-content:flex-end;}
+  .cr-ai-row.assistant{justify-content:flex-start;}
+  .cr-ai-msg{max-width:90%;border-radius:12px;padding:8px 12px;font-size:12px;line-height:1.6;}
+  .cr-ai-msg.user{background:var(--cr-green2);color:#fff;}
+  .cr-ai-msg.assistant{background:var(--cr-panel2);color:var(--cr-text);}
+  .cr-ai-typing{background:var(--cr-panel2);border-radius:12px;padding:10px 12px;display:inline-flex;gap:5px;}
+  .cr-ai-typing span{width:6px;height:6px;border-radius:50%;background:var(--cr-dim);animation:cr-ai-bounce 1.2s infinite;}
+  .cr-ai-input-wrap{padding:8px;border-top:1px solid var(--cr-border);flex-shrink:0;}
+  .cr-ai-input-row{display:flex;gap:8px;}
+  .cr-ai-textarea{flex:1;background:var(--cr-bg2);border:1px solid var(--cr-border);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--cr-text);font-family:var(--cr-body);resize:none;transition:border-color .2s;}
+  .cr-ai-textarea::placeholder{color:var(--cr-dimmer);}
+  .cr-ai-textarea:focus{outline:none;border-color:var(--cr-green);}
+  .cr-ai-textarea:disabled{opacity:.5;}
+  .cr-ai-send{background:var(--cr-green2);color:#fff;border:none;padding:0 14px;border-radius:10px;font-size:12px;font-weight:600;font-family:var(--cr-body);cursor:pointer;flex-shrink:0;transition:all .2s;}
+  .cr-ai-send:hover:not(:disabled){background:var(--cr-green);}
+  .cr-ai-send:disabled{opacity:.5;cursor:not-allowed;}
+  .cr-ai-hint{font-size:11px;color:var(--cr-dimmer);margin-top:6px;}
+  .cr-ai-md{display:flex;flex-direction:column;gap:4px;}
+  .cr-ai-md strong{color:#fff;font-weight:600;}
+  .cr-ai-md code{background:var(--cr-bg2);padding:1px 5px;border-radius:4px;color:var(--cr-blue);font-family:var(--cr-mono);}
+  .cr-ai-md-h{font-weight:700;color:#fff;}
+  @keyframes cr-ai-bounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-4px);}}
+`;
 
 // ─── Handle language change ───────────────────────────────────────────────
 const STARTER_TEMPLATES = {
@@ -36,318 +296,6 @@ const STARTER_TEMPLATES = {
   GO: `package main\n\nimport (\n    "bufio"\n    "fmt"\n    "os"\n)\n\nfunc main() {\n    reader := bufio.NewReader(os.Stdin)\n    input, _ := reader.ReadString('\\\\n')\n    \n    // Write your solution here\n    fmt.Println(input)\n}\n`,
 
   CPP: `#include <iostream>\n#include <string>\nusing namespace std;\n\nint main() {\n    string input;\n    getline(cin, input);\n    \n    // Write your solution here\n    cout << input << endl;\n    return 0;\n}\n`,
-};
-
-// ─── Interview Timer ──────────────────────────────────────────────────────────
-const InterviewTimer = ({ startedAt }) => {
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    const start = startedAt ? new Date(startedAt).getTime() : Date.now();
-
-    const tick = () => {
-      setElapsed(Math.floor((Date.now() - start) / 1000));
-    };
-
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [startedAt]);
-
-  const hrs = Math.floor(elapsed / 3600);
-  const mins = Math.floor((elapsed % 3600) / 60);
-  const secs = elapsed % 60;
-
-  const format = (n) => String(n).padStart(2, "0");
-
-  const color =
-    elapsed > 3600
-      ? "text-[#f85149]" // > 1 hour → red
-      : elapsed > 2700
-        ? "text-[#d29922]" // > 45 min → yellow
-        : "text-[#3fb950]"; // normal → green
-
-  return (
-    <div className={`flex items-center gap-1 font-mono text-xs ${color}`}>
-      <svg
-        className="w-3 h-3"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-      {hrs > 0 && `${format(hrs)}:`}
-      {format(mins)}:{format(secs)}
-    </div>
-  );
-};
-// ─── Output panel — Terminal + Test Cases tabs ────────────────────────────────
-const OutputPanel = ({ executionResult, isExecuting }) => {
-  const [activeTab, setActiveTab] = useState("testcases");
-
-  const hasTestCases = executionResult?.results?.length > 0;
-  const hasOutput = executionResult?.stdout || executionResult?.stderr;
-
-  // Auto switch to terminal when there's an error
-  useEffect(() => {
-    if (executionResult?.stderr && !executionResult?.passed) {
-      setActiveTab("terminal");
-    }
-  }, [executionResult]);
-  return (
-    <div
-      className="bg-[#161b22] border-t border-[#30363d] shrink-0 flex flex-col"
-      style={{ height: "220px" }}
-    >
-      {/* Tab bar + status */}
-      <div className="flex items-center justify-between px-3 border-b border-[#30363d] shrink-0">
-        {/* Tabs */}
-        <div className="flex items-center">
-          <button
-            onClick={() => setActiveTab("testcases")}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-              activeTab === "testcases"
-                ? "border-[#238636] text-white"
-                : "border-transparent text-[#8b949e] hover:text-white"
-            }`}
-          >
-            Test Cases
-            {hasTestCases && (
-              <span
-                className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${
-                  executionResult.passed
-                    ? "bg-[#1a2f1a] text-[#3fb950]"
-                    : "bg-[#2d1318] text-[#f85149]"
-                }`}
-              >
-                {executionResult.results.filter((r) => r.passed).length}/
-                {executionResult.results.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab("terminal")}
-            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-              activeTab === "terminal"
-                ? "border-[#238636] text-white"
-                : "border-transparent text-[#8b949e] hover:text-white"
-            }`}
-          >
-            Terminal
-            {executionResult?.stderr && (
-              <span className="ml-1.5 w-1.5 h-1.5 bg-[#f85149] rounded-full inline-block" />
-            )}
-          </button>
-        </div>
-
-        {/* Status badge */}
-        {/* Status badge */}
-        {executionResult && (
-          <div className="flex items-center gap-2">
-            {/* Run vs Submit badge */}
-            {executionResult.isSubmission ? (
-              <span className="text-xs bg-[#1f2d3d] text-[#58a6ff] px-2 py-0.5 rounded-full border border-[#1f6feb]">
-                Submission
-              </span>
-            ) : (
-              <span className="text-xs bg-[#21262d] text-[#8b949e] px-2 py-0.5 rounded-full border border-[#30363d]">
-                Run
-              </span>
-            )}
-            <span
-              className={`text-xs font-semibold ${
-                executionResult.timedOut
-                  ? "text-[#d29922]"
-                  : executionResult.passed
-                    ? "text-[#3fb950]"
-                    : "text-[#f85149]"
-              }`}
-            >
-              {executionResult.timedOut
-                ? "⏱ TLE"
-                : executionResult.passed
-                  ? "✅ Accepted"
-                  : "❌ Wrong Answer"}
-            </span>
-            {executionResult.executionTimeMs && (
-              <span className="text-xs text-[#484f58]">
-                {executionResult.executionTimeMs}ms
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Tab content */}
-      <div className="flex-1 overflow-hidden">
-        {/* Executing spinner */}
-        {isExecuting ? (
-          <div className="h-full flex items-center justify-center gap-2">
-            <svg
-              className="animate-spin h-4 w-4 text-[#238636]"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8z"
-              />
-            </svg>
-            <span className="text-xs text-[#8b949e]">Running code...</span>
-          </div>
-        ) : activeTab === "testcases" ? (
-          /* ── Test Cases tab ── */
-          hasTestCases ? (
-            <TestCaseResults results={executionResult.results} />
-          ) : (
-            <div className="h-full flex items-center justify-center">
-              <p className="text-xs text-[#484f58]">
-                {executionResult
-                  ? "No test cases for this run"
-                  : "Run your code to see results"}
-              </p>
-            </div>
-          )
-        ) : (
-          /* ── Terminal tab ── */
-          <div className="h-full overflow-y-auto bg-[#0d1117] p-3 font-mono">
-            {/* Terminal header */}
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#21262d]">
-              <div className="flex gap-1">
-                <div className="w-2.5 h-2.5 rounded-full bg-[#f85149]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[#d29922]" />
-                <div className="w-2.5 h-2.5 rounded-full bg-[#3fb950]" />
-              </div>
-              <span className="text-xs text-[#484f58]">stdout / stderr</span>
-            </div>
-
-            {/* Output */}
-            {!executionResult?.stdout && !executionResult?.stderr ? (
-              <p className="text-xs text-[#484f58]">~ no output</p>
-            ) : (
-              <>
-                {/* Summary line */}
-                {executionResult?.summary && (
-                  <div className="text-xs text-[#8b949e] mb-2 pb-2 border-b border-[#21262d]">
-                    {executionResult.summary}
-                  </div>
-                )}
-
-                {/* Actual program stdout — System.out.println etc */}
-                {executionResult?.stdout && (
-                  <pre className="text-xs text-[#c9d1d9] whitespace-pre-wrap leading-relaxed">
-                    {executionResult.stdout}
-                  </pre>
-                )}
-                {executionResult?.stderr && (
-                  <>
-                    {executionResult?.stdout && (
-                      <div className="border-t border-[#21262d] my-2" />
-                    )}
-                    <pre className="text-xs text-[#f85149] whitespace-pre-wrap leading-relaxed">
-                      {executionResult.stderr}
-                    </pre>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-// ─── Test case results — LeetCode style ──────────────────────────────────────
-const TestCaseResults = ({ results }) => {
-  const [activeTab, setActiveTab] = useState(0);
-  const active = results[activeTab];
-
-  return (
-    <div className="flex flex-col" style={{ maxHeight: "180px" }}>
-      {/* Test case tabs */}
-      <div className="flex items-center gap-1 px-3 pt-2 pb-0 overflow-x-auto shrink-0">
-        {results.map((r, i) => (
-          <button
-            key={i}
-            onClick={() => setActiveTab(i)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium transition-colors shrink-0 ${
-              activeTab === i
-                ? "bg-[#0d1117] text-white border border-b-0 border-[#30363d]"
-                : "text-[#8b949e] hover:text-white"
-            }`}
-          >
-            <span className={r.passed ? "text-[#3fb950]" : "text-[#f85149]"}>
-              {r.passed ? "●" : "●"}
-            </span>
-            Case {i + 1}
-          </button>
-        ))}
-      </div>
-
-      {/* Active test case detail */}
-      {active && (
-        <div className="flex-1 overflow-y-auto bg-[#0d1117] p-3 space-y-3">
-          {/* Input */}
-          {active.input && active.input !== "hidden" && (
-            <div>
-              <p className="text-xs text-[#484f58] mb-1">Input</p>
-              <pre className="text-xs text-[#c9d1d9] font-mono bg-[#161b22] rounded-lg px-3 py-2">
-                {active.input}
-              </pre>
-            </div>
-          )}
-
-          {/* Expected output */}
-          {active.expectedOutput && active.expectedOutput !== "hidden" && (
-            <div>
-              <p className="text-xs text-[#484f58] mb-1">Expected Output</p>
-              <pre className="text-xs text-[#3fb950] font-mono bg-[#161b22] rounded-lg px-3 py-2">
-                {active.expectedOutput}
-              </pre>
-            </div>
-          )}
-
-          {/* Actual output */}
-          <div>
-            <p className="text-xs text-[#484f58] mb-1">Your Output</p>
-            <pre
-              className={`text-xs font-mono bg-[#161b22] rounded-lg px-3 py-2 ${
-                active.passed ? "text-[#3fb950]" : "text-[#f85149]"
-              }`}
-            >
-              {active.actualOutput === "hidden"
-                ? active.passed
-                  ? "Correct ✓"
-                  : "Wrong answer"
-                : active.actualOutput || "(empty)"}
-            </pre>
-          </div>
-
-          {/* Hidden badge */}
-          {active.input === "hidden" && (
-            <p className="text-xs text-[#484f58]">
-              🔒 Hidden test case — input/output not shown
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
 };
 
 const InterviewRoom = () => {
@@ -731,54 +679,38 @@ const InterviewRoom = () => {
   // ─── Loading state ────────────────────────────────────────────────────────
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
-        <div className="text-center">
-          <svg
-            className="animate-spin h-10 w-10 text-[#238636] mx-auto mb-4"
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8z"
-            />
-          </svg>
-          <p className="text-[#8b949e]">Connecting to room...</p>
+      <div className="cr-room-root">
+        <style>{ROOM_CSS}</style>
+        <div className="cr-room-loading">
+          <div className="box">
+            <svg className="cr-spin" width="40" height="40" viewBox="0 0 24 24" fill="none">
+              <circle className="op25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="op75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+            <p>Connecting to room...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-[#0d1117] flex flex-col overflow-hidden">
+    <div className="cr-room-root">
+      <style>{ROOM_CSS}</style>
+
       {/* Top bar */}
-      <div className="bg-[#161b22] border-b border-[#30363d] px-4 py-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-bold">
-            Code<span className="text-[#238636]">Room</span>
-          </h1>
-          <span className="text-[#30363d]">|</span>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 bg-[#3fb950] rounded-full animate-pulse" />
-            <span className="text-xs text-[#8b949e]">Live</span>
+      <div className="cr-room-topbar">
+        <div className="cr-room-topbar-left">
+          <h1 className="cr-room-logo">Code<b>Room</b></h1>
+          <span className="cr-room-sep">|</span>
+          <div className="cr-room-live">
+            <div className="cr-room-live-dot" />
+            <span>Live</span>
           </div>
           {/* Participants */}
-          {/* Participants */}
-          <div className="flex items-center gap-1">
+          <div className="cr-room-chips">
             {participants.map((p) => (
-              <span
-                key={p.userId}
-                className="text-xs bg-[#21262d] text-[#8b949e] px-2 py-0.5 rounded-full"
-              >
+              <span key={p.userId} className="cr-room-chip">
                 {p.email?.split("@")[0]}
               </span>
             ))}
@@ -786,18 +718,18 @@ const InterviewRoom = () => {
 
           {/* Timer */}
           {interviewStartedAt && (
-            <div className="flex items-center gap-1.5 bg-[#21262d] px-2 py-1 rounded-lg border border-[#30363d]">
+            <div className="cr-room-timer-wrap">
               <InterviewTimer startedAt={interviewStartedAt} />
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="cr-room-topbar-right">
           {/* Language selector */}
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
-            className="bg-[#21262d] border border-[#30363d] text-white text-xs px-2 py-1.5 rounded-lg focus:outline-none focus:border-[#238636]"
+            className="cr-room-select"
           >
             {LANGUAGES.map((lang) => (
               <option key={lang.value} value={lang.value}>
@@ -809,7 +741,7 @@ const InterviewRoom = () => {
           {/* Toggle question panel */}
           <button
             onClick={() => setShowQuestion(!showQuestion)}
-            className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] px-2 py-1.5 rounded-lg transition-colors"
+            className="cr-room-btn cr-room-btn-ghost"
           >
             {showQuestion ? "Hide" : "Show"} Question
           </button>
@@ -817,25 +749,19 @@ const InterviewRoom = () => {
           {/* Toggle video */}
           <button
             onClick={() => setShowVideo(!showVideo)}
-            className="text-xs text-[#8b949e] hover:text-white border border-[#30363d] px-2 py-1.5 rounded-lg transition-colors"
+            className="cr-room-btn cr-room-btn-ghost"
           >
             {showVideo ? "Hide" : "Show"} Video
           </button>
 
           {/* End interview — interviewer only */}
           {isInterviewer() && (
-            <button
-              onClick={handleEndInterview}
-              className="text-xs bg-[#da3633] hover:bg-[#f85149] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
+            <button onClick={handleEndInterview} className="cr-room-btn cr-room-btn-danger">
               End Interview
             </button>
           )}
           {!isInterviewer() && (
-            <button
-              onClick={handleLeaveRoom}
-              className="text-xs bg-[#da3633] hover:bg-[#f85149] text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
-            >
+            <button onClick={handleLeaveRoom} className="cr-room-btn cr-room-btn-danger">
               Leave Room
             </button>
           )}
@@ -843,35 +769,30 @@ const InterviewRoom = () => {
       </div>
 
       {/* Main layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="cr-room-main">
         {/* Question panel */}
         {showQuestion && question && (
-          <div className="w-80 bg-[#161b22] border-r border-[#30363d] flex flex-col overflow-hidden shrink-0">
+          <div className="cr-room-qpanel">
             {/* Header */}
-            <div className="p-4 border-b border-[#30363d] shrink-0">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="text-white font-semibold text-sm leading-tight">
-                  {question.questionTitle}
-                </h3>
+            <div className="cr-room-qhead">
+              <div className="cr-room-qhead-row">
+                <h3 className="cr-room-qtitle">{question.questionTitle}</h3>
                 <span
-                  className={`text-xs px-2 py-0.5 rounded-full shrink-0 font-medium ${
+                  className={`cr-room-qdiff ${
                     question.difficulty === "EASY"
-                      ? "text-[#3fb950] bg-[#1a2f1a]"
+                      ? "easy"
                       : question.difficulty === "MEDIUM"
-                        ? "text-[#d29922] bg-[#2d1f00]"
-                        : "text-[#f85149] bg-[#2d1318]"
+                        ? "medium"
+                        : "hard"
                   }`}
                 >
                   {question.difficulty}
                 </span>
               </div>
               {question.tags && (
-                <div className="flex flex-wrap gap-1 mt-2">
+                <div className="cr-room-qtags">
                   {question.tags.split(",").map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs bg-[#21262d] text-[#58a6ff] px-1.5 py-0.5 rounded"
-                    >
+                    <span key={tag} className="cr-room-qtag">
                       {tag.trim()}
                     </span>
                   ))}
@@ -880,113 +801,36 @@ const InterviewRoom = () => {
             </div>
 
             {/* Description — markdown rendered */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  p: ({ children }) => (
-                    <p className="text-[#8b949e] text-sm leading-relaxed mb-3">
-                      {children}
-                    </p>
-                  ),
-                  strong: ({ children }) => (
-                    <strong className="text-white font-semibold">
-                      {children}
-                    </strong>
-                  ),
-                  em: ({ children }) => (
-                    <em className="text-[#8b949e] italic">{children}</em>
-                  ),
-                  code: ({ inline, children }) =>
-                    inline ? (
-                      <code className="bg-[#21262d] text-[#58a6ff] px-1.5 py-0.5 rounded text-xs font-mono">
+            <div className="cr-room-qbody">
+              <div className="cr-room-md">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code: ({ inline, children }) =>
+                      inline ? (
+                        <code className="cr-md-code-inline">{children}</code>
+                      ) : (
+                        <pre className="cr-md-code-block">
+                          <code>{children}</code>
+                        </pre>
+                      ),
+                    a: ({ href, children }) => (
+                      <a href={href} target="_blank" rel="noreferrer">
                         {children}
-                      </code>
-                    ) : (
-                      <pre className="bg-[#0d1117] border border-[#30363d] rounded-lg p-3 my-3 overflow-x-auto">
-                        <code className="text-xs font-mono text-[#c9d1d9]">
-                          {children}
-                        </code>
-                      </pre>
+                      </a>
                     ),
-                  ul: ({ children }) => (
-                    <ul className="list-disc list-inside text-[#8b949e] text-sm space-y-1 mb-3 pl-2">
-                      {children}
-                    </ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="list-decimal list-inside text-[#8b949e] text-sm space-y-1 mb-3 pl-2">
-                      {children}
-                    </ol>
-                  ),
-                  li: ({ children }) => (
-                    <li className="text-[#8b949e] text-sm">{children}</li>
-                  ),
-                  h1: ({ children }) => (
-                    <h1 className="text-white font-bold text-base mb-2">
-                      {children}
-                    </h1>
-                  ),
-                  h2: ({ children }) => (
-                    <h2 className="text-white font-semibold text-sm mb-2">
-                      {children}
-                    </h2>
-                  ),
-                  h3: ({ children }) => (
-                    <h3 className="text-[#8b949e] font-semibold text-sm mb-1">
-                      {children}
-                    </h3>
-                  ),
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-[#238636] pl-3 my-3 text-[#8b949e] italic text-sm">
-                      {children}
-                    </blockquote>
-                  ),
-                  img: ({ src, alt }) => (
-                    <img
-                      src={src}
-                      alt={alt}
-                      className="rounded-lg max-w-full my-3 border border-[#30363d]"
-                    />
-                  ),
-                  table: ({ children }) => (
-                    <div className="overflow-x-auto my-3">
-                      <table className="w-full text-xs border-collapse">
-                        {children}
-                      </table>
-                    </div>
-                  ),
-                  th: ({ children }) => (
-                    <th className="border border-[#30363d] bg-[#21262d] text-white px-3 py-1.5 text-left">
-                      {children}
-                    </th>
-                  ),
-                  td: ({ children }) => (
-                    <td className="border border-[#30363d] text-[#8b949e] px-3 py-1.5">
-                      {children}
-                    </td>
-                  ),
-                  hr: () => <hr className="border-[#30363d] my-4" />,
-                  a: ({ href, children }) => (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#58a6ff] hover:underline"
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {question.description}
-              </ReactMarkdown>
+                    img: ({ src, alt }) => <img src={src} alt={alt} />,
+                  }}
+                >
+                  {question.description}
+                </ReactMarkdown>
+              </div>
             </div>
           </div>
         )}
 
         {/* Editor */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="cr-room-editor-col">
           <CodeEditor
             code={currentCode}
             language={language}
@@ -994,8 +838,6 @@ const InterviewRoom = () => {
             roomId={roomId}
             isRemoteChange={isRemoteChange}
           />
-
-          {/* Execution result */}
 
           {/* ── Output panel — Terminal + Test Cases ─────────────────────────── */}
           {(executionResult || isExecuting) && (
@@ -1006,12 +848,11 @@ const InterviewRoom = () => {
           )}
         </div>
 
-        {/* Video panel */}
         {/* Right panel — Video + AI Copilot */}
-        <div className="w-80 bg-[#161b22] border-l border-[#30363d] shrink-0 flex flex-col overflow-hidden">
+        <div className="cr-room-rightcol">
           {/* Video panel */}
           {showVideo && (
-            <div className={`shrink-0 ${isInterviewer() ? "h-96" : "flex-1"}`}>
+            <div className={`cr-room-video-slot ${isInterviewer() ? "lead" : "full"}`}>
               <VideoPanel
                 roomId={roomId}
                 participants={participants}
@@ -1023,7 +864,7 @@ const InterviewRoom = () => {
 
           {/* AI Copilot — interviewer only */}
           {isInterviewer() && (
-            <div className="flex-1 overflow-hidden flex flex-col">
+            <div className="cr-room-ai-slot">
               <AICopilotPanel />
             </div>
           )}

@@ -23,14 +23,11 @@ const getInitials = (label = "") => {
   return "??";
 };
 const AvatarFallback = ({ label }) => (
-  <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d1117]">
-    <div
-      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold mb-1 select-none"
-      style={{ backgroundColor: getAvatarColor(label) }}
-    >
+  <div className="cr-vid-avatar-wrap">
+    <div className="cr-vid-avatar" style={{ backgroundColor: getAvatarColor(label) }}>
       {getInitials(label)}
     </div>
-    <span className="text-xs text-[#484f58]">Camera off</span>
+    <span className="cr-vid-avatar-sub">Camera off</span>
   </div>
 );
 
@@ -579,39 +576,31 @@ const VideoPanel = ({
   const remoteVideoEntries = Object.entries(remoteVideos);
   // total = all remotes + local; drives grid column count
   const totalVideos = remoteVideoEntries.length + 1;
-  const gridCols = totalVideos >= 3 ? "grid-cols-2" : "grid-cols-1";
+  const gridCols = totalVideos >= 3 ? "cols2" : "cols1";
 
   return (
-    <div className="h-full flex flex-col bg-[#161b22]">
+    <div className="cr-vid">
       {/* Header */}
-      <div className="px-3 py-2 border-b border-[#30363d] flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 bg-[#3fb950] rounded-full animate-pulse" />
-          <span className="text-xs text-[#8b949e] font-medium">
+      <div className="cr-vid-head">
+        <div className="cr-vid-live">
+          <div className="cr-vid-live-dot" />
+          <span className="cr-vid-count">
             Live · {connectedCount + 1} participant
             {connectedCount + 1 !== 1 ? "s" : ""}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="cr-vid-ctrls">
           <button
             onClick={handleToggleMute}
             title={isMuted ? "Unmute" : "Mute"}
-            className={`p-1.5 rounded-lg text-xs transition-colors ${
-              isMuted
-                ? "bg-[#da3633] text-white"
-                : "bg-[#21262d] text-[#8b949e] hover:text-white"
-            }`}
+            className={`cr-vid-ctrl${isMuted ? " danger" : ""}`}
           >
             {isMuted ? "🔇" : "🎤"}
           </button>
           <button
             onClick={handleToggleCamera}
             title={isCameraOff ? "Turn camera on" : "Turn camera off"}
-            className={`p-1.5 rounded-lg text-xs transition-colors ${
-              isCameraOff
-                ? "bg-[#da3633] text-white"
-                : "bg-[#21262d] text-[#8b949e] hover:text-white"
-            }`}
+            className={`cr-vid-ctrl${isCameraOff ? " danger" : ""}`}
           >
             {isCameraOff ? "📵" : "📷"}
           </button>
@@ -619,19 +608,17 @@ const VideoPanel = ({
       </div>
 
       {/* Videos — unified equal-size grid, auto-adjusts columns as people join */}
-      <div className="flex-1 p-2 overflow-y-auto">
+      <div className="cr-vid-body">
         {remoteVideoEntries.length === 0 && (
-          <div className="flex items-center justify-center bg-[#0d1117] rounded-lg py-3 mb-1.5">
-            <div className="text-center">
-              <div className="w-8 h-8 bg-[#21262d] rounded-full flex items-center justify-center mx-auto mb-1.5">
-                <span className="text-base">👤</span>
-              </div>
-              <p className="text-xs text-[#484f58]">Waiting for others...</p>
+          <div className="cr-vid-waiting">
+            <div className="cr-vid-waiting-ico">
+              <span>👤</span>
             </div>
+            <p>Waiting for others...</p>
           </div>
         )}
 
-        <div className={`grid gap-1.5 ${gridCols}`}>
+        <div className={`cr-vid-grid ${gridCols}`}>
           {/* Remote participants */}
           {remoteVideoEntries.map(([userId, stream]) => {
             const p = participants.find((p) => p.userId === userId);
@@ -641,15 +628,10 @@ const VideoPanel = ({
                 : p?.email?.split("@")[0] || "Interviewer";
             const camOff = remoteCameraOff[userId];
             return (
-              <div
-                key={userId}
-                className="relative aspect-video rounded-lg overflow-hidden bg-[#0d1117]"
-              >
+              <div key={userId} className="cr-vid-tile">
                 <RemoteVideoFill stream={stream} />
                 {camOff && <AvatarFallback label={label} />}
-                <span className="absolute bottom-1 left-2 text-xs text-white bg-black/60 px-1.5 py-0.5 rounded truncate max-w-[90%]">
-                  {label}
-                </span>
+                <span className="cr-vid-label">{label}</span>
               </div>
             );
           })}
@@ -658,23 +640,17 @@ const VideoPanel = ({
           {(() => {
             const localLabel = `You${isLeadInterviewer ? " 👑" : ""}`;
             return (
-              <div className="relative aspect-video rounded-lg overflow-hidden bg-[#0d1117]">
+              <div className="cr-vid-tile">
                 <video
                   ref={localVideoRef}
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover"
+                  className="cr-vid-video"
                 />
                 {isCameraOff && <AvatarFallback label={localLabel} />}
-                <span className="absolute bottom-1 left-2 text-xs text-white bg-black/50 px-1.5 py-0.5 rounded">
-                  {localLabel}
-                </span>
-                {isMuted && (
-                  <span className="absolute bottom-1 right-2 text-xs bg-[#da3633] px-1.5 py-0.5 rounded">
-                    🔇
-                  </span>
-                )}
+                <span className="cr-vid-label">{localLabel}</span>
+                {isMuted && <span className="cr-vid-mute">🔇</span>}
               </div>
             );
           })()}
@@ -683,48 +659,27 @@ const VideoPanel = ({
 
       {/* Recording — any interviewer */}
       {user?.role === "INTERVIEWER" && (
-        <div className="p-2 border-t border-[#30363d] space-y-1.5">
+        <div className="cr-vid-rec">
           {isUploading ? (
-            <div className="flex items-center justify-center gap-2 text-xs text-[#8b949e] py-1.5">
-              <svg
-                className="animate-spin h-3 w-3"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v8z"
-                />
+            <div className="cr-vid-rec-uploading">
+              <svg className="cr-spin" width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <circle className="op25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="op75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
               </svg>
               Uploading to cloud...
             </div>
           ) : isRecording ? (
             <>
-              <div className="flex items-center justify-center gap-2 text-xs text-[#f85149] py-0.5">
-                <span className="w-2 h-2 bg-[#f85149] rounded-full animate-pulse" />
+              <div className="cr-vid-rec-active">
+                <span className="cr-vid-rec-dot" />
                 Recording in progress...
               </div>
-              <button
-                onClick={handleStopRecording}
-                className="w-full text-xs py-1.5 rounded-lg bg-[#da3633] hover:bg-[#f85149] text-white font-medium flex items-center justify-center gap-1.5 transition-colors"
-              >
+              <button onClick={handleStopRecording} className="cr-vid-rec-btn stop">
                 ⏹ Stop &amp; Save
               </button>
             </>
           ) : (
-            <button
-              onClick={handleStartRecording}
-              className="w-full text-xs py-1.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-[#8b949e] border border-[#30363d] font-medium flex items-center justify-center gap-1.5 transition-colors"
-            >
+            <button onClick={handleStartRecording} className="cr-vid-rec-btn start">
               ⏺ Record Session
             </button>
           )}
@@ -744,14 +699,7 @@ const RemoteVideoFill = ({ stream }) => {
     }
   }, [stream]);
 
-  return (
-    <video
-      ref={videoRef}
-      autoPlay
-      playsInline
-      className="w-full h-full object-cover"
-    />
-  );
+  return <video ref={videoRef} autoPlay playsInline className="cr-vid-video" />;
 };
 
 export default VideoPanel;
