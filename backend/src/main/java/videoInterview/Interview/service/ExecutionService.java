@@ -2,6 +2,10 @@ package videoInterview.Interview.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import videoInterview.Interview.dto.execution.ExecutionRequest;
@@ -10,25 +14,30 @@ import videoInterview.Interview.entity.Question;
 import videoInterview.Interview.entity.TestCase;
 import videoInterview.Interview.repository.QuestionRepository;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
 public class ExecutionService {
 
-    @Value("${executor.url:http://localhost:5002}")
-    private String executorUrl;
+    @Value("${executor.api.url:https://api.onlinecompiler.io}")
+    private String executorApiUrl;
+
+    @Value("${executor.api.key:}")
+    private String executorApiKey;
 
     private final RestTemplate restTemplate;
     private final QuestionRepository questionRepository;
 
     public ExecutionResponse execute(ExecutionRequest request) {
 
-        Map<String, Object> payload = new HashMap<>();
+        if (executorApiKey.isBlank()) {
+            return errorResponse("Executor API key is not configured", false);
+        }
 
         if (request.getQuestionId() != null) {
 
@@ -37,84 +46,134 @@ public class ExecutionService {
                     .findByIdWithTestCases(request.getQuestionId())
                     .orElseThrow(() -> new RuntimeException("Question not found"));
 
-            Stream<TestCase> stream = question.getTestCases().stream();
+            List<TestCase> testCases = question.getTestCases().stream()
+                    .filter(tc -> request.isSubmitAll() || !tc.isHidden())
+                    .limit(request.isSubmitAll() ? Long.MAX_VALUE : 3)
+                    .toList();
 
-            if (!request.isSubmitAll()) {
-                // ── Run button → visible test cases only, max 3 ──────────────
-                stream = stream
-                        .filter(tc -> !tc.isHidden())
-                        .limit(3);
-            }
-            // ── Submit button → all test cases (visible + hidden) ─────────────
-
-            List<Map<String, Object>> testCases = stream
-                    .map(tc -> {
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("input", tc.getInput());
-                        map.put("expectedOutput", tc.getExpectedOutput());
-                        map.put("hidden", tc.isHidden());
-                        return map;
-                    })
-                    .collect(Collectors.toList());
-
-            payload.put("code", request.getCode());
-            payload.put("language", request.getLanguage());
-            payload.put("testCases", testCases);
-
-        } else {
-            // No question — plain stdin run
-            payload.put("code", request.getCode());
-            payload.put("language", request.getLanguage());
-            payload.put("stdin", request.getStdin() != null
-                    ? request.getStdin()
-                    : "");
+            return executeTestCases(request, testCases);
         }
 
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.USE_LONG_FOR_INTS, false);
+        return executeSingle(request.getCode(), request.getLanguage(), request.getStdin());
+    }
+
+    private ExecutionResponse executeTestCases(ExecutionRequest request, List<TestCase> testCases) {
+        List<ExecutionResponse.TestCaseResult> results = new ArrayList<>();
+        StringBuilder errors = new StringBuilder();
+        int totalTimeMs = 0;
+        boolean timedOut = false;
+
+        for (TestCase testCase : testCases) {
+            ExecutionResponse providerResponse = executeSingle(
+                    request.getCode(), request.getLanguage(), testCase.getInput());
+            boolean passed = providerResponse.isPassed()
+                    && normalize(providerResponse.getStdout()).equals(normalize(testCase.getExpectedOutput()));
+            totalTimeMs += providerResponse.getExecutionTimeMs() == null
+                    ? 0
+                    : providerResponse.getExecutionTimeMs();
+                timedOut |= providerResponse.isTimedOut();
+
+            String actualOutput = testCase.isHidden() ? "hidden" : providerResponse.getStdout();
+            String expectedOutput = testCase.isHidden() ? "hidden" : testCase.getExpectedOutput();
+            String input = testCase.isHidden() ? "hidden" : testCase.getInput();
+            results.add(new ExecutionResponse.TestCaseResult(
+                    input,
+                    expectedOutput,
+                    actualOutput,
+                    passed,
+                    providerResponse.getStderr(),
+                    providerResponse.getExecutionTimeMs()));
+
+            if (providerResponse.getStderr() != null && !providerResponse.getStderr().isBlank()) {
+                errors.append(providerResponse.getStderr()).append('\n');
+            }
+        }
+
+        ExecutionResponse response = new ExecutionResponse();
+        response.setPassed(results.stream().allMatch(result -> result.isPassed()));
+        response.setTimedOut(timedOut);
+        response.setExecutionTimeMs(totalTimeMs);
+        response.setResults(results);
+        response.setSummary(results.stream().filter(result -> result.isPassed()).count()
+                + "/" + results.size() + " passed");
+        response.setStderr(errors.toString().trim());
+        return response;
+    }
+
+    private ExecutionResponse executeSingle(String code, String language, String input) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("compiler", compilerFor(language));
+        payload.put("code", code);
+        payload.put("input", input == null ? "" : input);
 
         try {
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.AUTHORIZATION, executorApiKey);
+            ResponseEntity<OnlineCompilerResponse> response = restTemplate.postForEntity(
+                    executorApiUrl + "/api/run-code-sync/",
+                    new HttpEntity<>(payload, headers),
+                    OnlineCompilerResponse.class);
 
-            org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(
-                    payload, headers);
-
-            org.springframework.http.ResponseEntity<String> rawResponse = restTemplate.postForEntity(
-                    executorUrl + "/execute",
-                    entity,
-                    String.class);
-
-            return mapper.readValue(rawResponse.getBody(), ExecutionResponse.class);
-
-        } catch (org.springframework.web.client.HttpServerErrorException e) {
-            // Executor returned 5xx — parse its JSON error body and return it as a valid response
-            // so the frontend can display the actual error message
-            System.err.println("❌ Executor 5xx: " + e.getResponseBodyAsString());
-            try {
-                return mapper.readValue(e.getResponseBodyAsString(), ExecutionResponse.class);
-            } catch (Exception parseEx) {
-                ExecutionResponse errResp = new ExecutionResponse();
-                errResp.setStderr("Executor service error: " + e.getStatusCode());
-                errResp.setPassed(false);
-                errResp.setResults(java.util.Collections.emptyList());
-                return errResp;
+            OnlineCompilerResponse body = response.getBody();
+            if (body == null) {
+                return errorResponse("OnlineCompiler returned an empty response", false);
             }
-        } catch (org.springframework.web.client.HttpClientErrorException e) {
-            System.err.println("❌ Executor 4xx: " + e.getResponseBodyAsString());
-            throw new RuntimeException("Executor error: " + e.getResponseBodyAsString());
+
+            ExecutionResponse result = new ExecutionResponse();
+            result.setStdout(body.output);
+            result.setStderr(body.error);
+            result.setPassed("success".equalsIgnoreCase(body.status) && body.exitCode != null && body.exitCode == 0);
+            result.setTimedOut(body.exitCode != null && (body.exitCode == 124 || body.exitCode == 137));
+            result.setExecutionTimeMs(toMilliseconds(body.total != null ? body.total : body.time));
+            result.setResults(new ArrayList<>());
+            return result;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            return errorResponse("OnlineCompiler error: " + e.getResponseBodyAsString(), false);
         } catch (org.springframework.web.client.ResourceAccessException e) {
-            // Executor is unreachable (connection refused, timeout, etc.)
-            System.err.println("❌ Executor unreachable: " + e.getMessage());
-            ExecutionResponse errResp = new ExecutionResponse();
-            errResp.setStderr("Executor service is not running. Please start the executor service.");
-            errResp.setPassed(false);
-            errResp.setResults(java.util.Collections.emptyList());
-            return errResp;
+            return errorResponse("OnlineCompiler is unreachable: " + e.getMessage(), false);
         } catch (Exception e) {
-            System.err.println("❌ Execution failed: " + e.getMessage());
-            throw new RuntimeException("Execution failed: " + e.getMessage());
+            return errorResponse("Execution failed: " + e.getMessage(), false);
         }
+    }
+
+    private String compilerFor(String language) {
+        return switch (language == null ? "" : language.toUpperCase(Locale.ROOT)) {
+            case "PYTHON" -> "python-3.14";
+            case "JAVA" -> "openjdk-25";
+            case "CPP" -> "g++-15";
+            case "GO" -> "go-1.26";
+            case "JAVASCRIPT" -> "typescript-deno";
+            default -> throw new IllegalArgumentException("Unsupported language: " + language);
+        };
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().replace("\r\n", "\n");
+    }
+
+    private Integer toMilliseconds(String seconds) {
+        if (seconds == null || seconds.isBlank()) {
+            return 0;
+        }
+        return (int) Math.round(Double.parseDouble(seconds) * 1000);
+    }
+
+    private ExecutionResponse errorResponse(String message, boolean timedOut) {
+        ExecutionResponse response = new ExecutionResponse();
+        response.setStderr(message);
+        response.setPassed(false);
+        response.setTimedOut(timedOut);
+        response.setResults(new ArrayList<>());
+        return response;
+    }
+
+    private static class OnlineCompilerResponse {
+        public String output;
+        public String error;
+        public String status;
+        public Integer exitCode;
+        public String time;
+        public String total;
     }
 }
