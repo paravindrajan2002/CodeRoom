@@ -3,120 +3,332 @@ import { Link } from "react-router-dom";
 
 // ─── Service detail data ──────────────────────────────────────────────────────
 const NODES = {
-  frontend: {
+  client: {
     color: "#58a6ff",
-    title: "Frontend",
+    title: "Browser / Client",
     role: "React · Vite · Tailwind · Zustand",
     does: [
-      "Renders the interview room, editor, video panel, and dashboards",
-      "Holds a persistent socket to the relay for real-time updates",
-      "Calls the backend directly over REST for auth and data",
-      "Runs the WebRTC peer connections in the browser",
+      "Serves the interview room, editor, video panel, dashboards, and authentication UI",
+      "Connects to the public HTTPS endpoint through Nginx",
+      "Uses REST for durable API operations and Socket.IO for real-time collaboration",
+      "Runs WebRTC peer connections directly in the browser",
     ],
     talks:
-      "Opens a WebSocket to the Relay for live collaboration, and makes authenticated REST calls to the Backend for everything durable.",
-    why: "A thin, stateless client. All truth lives server-side, so a refresh restores full session state from Redis and Postgres.",
+      "All browser traffic enters through Nginx over HTTPS. REST requests are routed to Spring Boot, while Socket.IO connections are routed to the Node Relay.",
+    why: "The frontend is statically built and served directly from the VM, keeping the entire application under one stable public endpoint without requiring Vercel.",
   },
+
+  nginx: {
+    color: "#22c55e",
+    title: "Nginx",
+    role: "Reverse proxy · TLS · Static hosting",
+    does: [
+      "Terminates HTTPS using the Let's Encrypt certificate",
+      "Serves the React/Vite production build from /var/www/coderoom",
+      "Routes /api/* to Spring Boot on localhost:8080",
+      "Routes /socket.io/* to the Node Relay on localhost:4000",
+    ],
+    talks:
+      "Acts as the single public entry point. External traffic reaches Nginx on ports 80/443; application services remain bound to the VM.",
+    why: "Nginx gives the application one stable HTTPS endpoint while keeping internal services off the public network. It also handles WebSocket upgrades and large API uploads.",
+  },
+
   relay: {
     color: "#3fb950",
     title: "Relay",
     role: "Node.js · Socket.io · ioredis",
     does: [
-      "Broadcasts code changes and cursor moves to all participants",
-      "Routes WebRTC offer / answer / ICE between specific peers",
-      "Forwards run & submit requests to the backend, streams results back",
-      "Persists live state to Redis and autosaves to the backend",
+      "Broadcasts code changes and cursor moves to participants",
+      "Routes WebRTC offer / answer / ICE signaling between peers",
+      "Forwards run and submit requests to Spring Boot",
+      "Maintains live room state and autosaves through Redis/backend",
     ],
     talks:
-      "Sits between Frontend and Backend. Nothing durable is stored here — it is a fast, ephemeral message router backed by Redis pub/sub.",
-    why: "Node's event loop suits thousands of tiny frequent messages far better than a JVM thread-per-request model. Video signaling only — media stays peer-to-peer.",
+      "Receives Socket.IO connections from Nginx and communicates with Spring Boot and Redis over the VM/private network.",
+    why: "Node's event-driven model is well suited to frequent real-time messages such as keystrokes, cursor movements, presence, and WebRTC signaling.",
   },
+
   backend: {
     color: "#d29922",
     title: "Backend",
     role: "Spring Boot · Spring Security · JPA",
     does: [
-      "Owns auth: register, login, JWT access + refresh, roles",
-      "Manages the interview lifecycle, scoring, and question bank",
-      "Filters test cases (Run = visible, Submit = all) then calls the executor",
-      "Streams recordings to Cloudflare R2 and proxies the AI copilot",
+      "Owns authentication, JWT access/refresh tokens, and roles",
+      "Manages interviews, rooms, scoring, questions, and test cases",
+      "Processes Run/Submit requests and communicates with the Executor",
+      "Handles recordings, Cloudflare R2 integration, and the Gemini AI copilot",
     ],
     talks:
-      "The source of truth. Talks to Postgres for persistence, the Executor for code runs, and external services (R2, Gemini).",
-    why: "Correctness, security, and relational data belong in a mature, structured framework. JPA + Postgres is the right tool for users, scores, and test cases.",
+      "Receives REST traffic from Nginx and internal requests from the Relay. Persists durable data to Neon PostgreSQL and calls the Executor, R2, and Gemini.",
+    why: "Spring Boot owns business correctness and security while JPA/PostgreSQL provide durable transactional storage.",
   },
+
   executor: {
     color: "#bc8cff",
     title: "Executor",
-    role: "Node.js · Dockerode",
+    role: "Node.js · Dockerode · Docker",
     does: [
-      "Spins up one throwaway Docker container per test case",
-      "Caps memory (128MB), CPU (0.5 core), and processes; no network",
-      "Handles Python, JS, Java, Go, C++ with per-language strategies",
-      "Runs all test cases in parallel, separates stdout from pass/fail",
+      "Creates a throwaway Docker container for each test case",
+      "Supports Python, JavaScript, Java, Go, and C++",
+      "Limits memory, CPU, processes, and network access",
+      "Runs test cases and returns structured stdout/pass-fail results",
     ],
     talks:
-      "Receives code + test cases from the Backend, returns structured results. Talks to nothing else — fully walled off.",
-    why: "Running arbitrary code is the riskiest part of the system. Isolating it means a runaway or malicious submission can only ever destroy its own container.",
+      "Receives code and test cases from Spring Boot and returns execution results. It does not communicate with the public internet or browser.",
+    why: "Untrusted candidate code must be isolated from the application. Docker provides a disposable security boundary around each execution.",
   },
+
   redis: {
     color: "#f85149",
     title: "Redis",
-    role: "Upstash · ephemeral cache + pub/sub",
+    role: "Upstash · ephemeral state + pub/sub",
     does: [
-      "Holds hot live room state — current code, language, participants",
-      "Backs Socket.io pub/sub so multiple relay instances stay in sync",
-      "Everything carries a TTL — nothing here is permanent",
+      "Stores hot interview state such as code, language, and participants",
+      "Reduces database writes caused by frequent editor changes",
+      "Supports pub/sub for real-time relay communication",
+      "Uses expiration/TTL for temporary state",
     ],
-    talks: "Read and written only by the Relay.",
-    why: "Live state changes on every keystroke. Writing that to Postgres would hammer it — Redis absorbs the churn while Postgres stays the durable record.",
+    talks:
+      "Used primarily by the Relay for live room state and real-time coordination.",
+    why: "Live collaborative state changes frequently. Redis absorbs that high-frequency workload while PostgreSQL remains the durable source of truth.",
   },
+
   postgres: {
     color: "#e6edf3",
-    title: "Postgres",
-    role: "Neon · durable source of truth",
+    title: "PostgreSQL",
+    role: "Neon · durable database",
     does: [
-      "Stores users, interviews, scores, questions, and test cases",
-      "Holds the recording URL once an interview is captured",
-      "Receives the autosaved code snapshot from the relay",
+      "Stores users, interviews, rooms, scores, questions, and test cases",
+      "Stores durable interview/session information",
+      "Stores recording URLs and persisted code snapshots",
+      "Provides transactional relational storage through JPA/Hibernate",
     ],
-    talks: "Accessed only by the Backend through JPA.",
-    why: "Relational, transactional, permanent. The single place that survives restarts, refreshes, and Redis expiry.",
+    talks:
+      "Accessed by Spring Boot through JPA/Hibernate. The browser and Relay never access PostgreSQL directly.",
+    why: "PostgreSQL is the permanent source of truth. External Neon hosting also keeps the database independent from the VM lifecycle.",
+  },
+
+  r2: {
+    color: "#f97316",
+    title: "Cloudflare R2",
+    role: "Object storage · recordings",
+    does: [
+      "Stores interview recordings and large media objects",
+      "Keeps binary files outside PostgreSQL",
+      "Provides a public/shareable recording URL",
+      "Works with the backend through the S3-compatible API",
+    ],
+    talks:
+      "Spring Boot uploads recordings to R2 and persists the resulting recording URL in PostgreSQL.",
+    why: "Large recordings should not live inside a relational database. Object storage is cheaper and better suited for large media files.",
+  },
+
+  gemini: {
+    color: "#60a5fa",
+    title: "Gemini API",
+    role: "External AI service",
+    does: [
+      "Powers the interviewer AI copilot",
+      "Provides interview assistance and evaluation capabilities",
+      "Is accessed through the Spring Boot backend",
+      "Keeps the provider API key away from the browser",
+    ],
+    talks:
+      "The browser never calls Gemini directly. Spring Boot acts as the secure integration layer.",
+    why: "Keeping the AI credential server-side prevents exposing the API key in the production frontend.",
+  },
+
+  vm: {
+    color: "#a78bfa",
+    title: "Oracle Cloud VM",
+    role: "Production compute · Linux · systemd",
+    does: [
+      "Hosts Nginx, the React production build, Spring Boot, Relay, and Docker",
+      "Runs Spring Boot and Relay as systemd services",
+      "Provides the Docker runtime used by the Executor",
+      "Acts as the single application compute layer",
+    ],
+    talks:
+      "Nginx, Spring Boot, Relay, and Docker communicate locally inside the VM. Only Nginx is exposed publicly.",
+    why: "For the current small-scale application, one inexpensive VM keeps infrastructure simple and free/low-cost while still providing HTTPS, process supervision, reverse proxying, and isolated execution.",
   },
 };
 
 const EDGE_MAP = {
-  frontend: ["e-fe-relay", "e-fe-be"],
-  relay: ["e-fe-relay", "e-relay-be", "e-relay-redis"],
-  backend: ["e-fe-be", "e-relay-be", "e-be-exec", "e-be-pg"],
-  executor: ["e-be-exec"],
+  client: ["e-nginx-client"],
+
+  nginx: [
+    "e-domain-nginx",
+    "e-nginx-client",
+    "e-nginx-backend",
+    "e-nginx-relay",
+  ],
+
+  relay: ["e-nginx-relay", "e-relay-redis", "e-relay-executor"],
+
+  backend: ["e-nginx-backend", "e-backend-executor"],
+
+  executor: [
+    "e-backend-executor",
+    "e-relay-executor",
+    "e-executor-postgres",
+    "e-executor-r2",
+    "e-executor-gemini",
+  ],
+
   redis: ["e-relay-redis"],
-  postgres: ["e-be-pg"],
+
+  postgres: ["e-executor-postgres"],
+
+  r2: ["e-executor-r2"],
+
+  gemini: ["e-executor-gemini"],
+
+  vm: [
+    "e-nginx-client",
+    "e-nginx-backend",
+    "e-nginx-relay",
+    "e-relay-redis",
+    "e-backend-executor",
+    "e-relay-executor",
+  ],
 };
 
 const FEATURES = [
-  { icon: "🎥", title: "N-way mesh video", body: "Peer-to-peer WebRTC mesh. Up to four interviewers plus a candidate, with the candidate's feed always emphasized. Video never touches the server." },
-  { icon: "⚡", title: "Sandboxed execution", body: "Python, JavaScript, Java, Go, and C++ run in isolated Docker containers — capped memory, no network, auto-destroyed. Test cases run in parallel." },
-  { icon: "🧩", title: "Run vs Submit", body: "LeetCode-style split: Run checks visible cases fast; Submit runs the full hidden suite. Separate stdout terminal and per-case pass/fail views." },
-  { icon: "📝", title: "Live collaborative editor", body: "Real-time code sync across all participants, per-language starter templates, and markdown questions with images for tree and graph problems." },
-  { icon: "⏺", title: "Session recording", body: "Screen and webcam composited on a canvas, mixed audio, uploaded to Cloudflare R2. Shareable playback link saved to the interview." },
-  { icon: "🤖", title: "AI copilot", body: "A private Gemini-powered assistant for interviewers — suggests follow-ups and evaluates approaches, never visible to the candidate." },
+  {
+    icon: "🎥",
+    title: "N-way mesh video",
+    body: "Peer-to-peer WebRTC mesh. Up to four interviewers plus a candidate, with the candidate's feed always emphasized. Video never touches the server.",
+  },
+  {
+    icon: "⚡",
+    title: "Sandboxed execution",
+    body: "Python, JavaScript, Java, Go, and C++ run in isolated Docker containers — capped memory, no network, auto-destroyed. Test cases run in parallel.",
+  },
+  {
+    icon: "🧩",
+    title: "Run vs Submit",
+    body: "LeetCode-style split: Run checks visible cases fast; Submit runs the full hidden suite. Separate stdout terminal and per-case pass/fail views.",
+  },
+  {
+    icon: "📝",
+    title: "Live collaborative editor",
+    body: "Real-time code sync across all participants, per-language starter templates, and markdown questions with images for tree and graph problems.",
+  },
+  {
+    icon: "⏺",
+    title: "Session recording",
+    body: "Screen and webcam composited on a canvas, mixed audio, uploaded to Cloudflare R2. Shareable playback link saved to the interview.",
+  },
+  {
+    icon: "🤖",
+    title: "AI copilot",
+    body: "A private Gemini-powered assistant for interviewers — suggests follow-ups and evaluates approaches, never visible to the candidate.",
+  },
 ];
 
 const DECISIONS = [
-  { pick: "Three services", over: "one monolith", body: "Running untrusted candidate code is dangerous, and real-time signaling is latency-sensitive. Keeping them in one process means a runaway container could stall video, or a crash could take down auth. <strong>Splitting by responsibility</strong> — truth, real-time, isolation — lets each scale, fail, and restart independently." },
-  { pick: "Node + Socket.io relay", over: "Spring WebSocket", body: "The relay handles thousands of tiny, frequent messages — keystrokes, cursor moves, ICE candidates. Node's event loop and Socket.io's mature ecosystem fit this far better than a JVM thread-per-request model. It also proves a <strong>polyglot integration</strong> between a non-JVM real-time layer and a Spring backend." },
-  { pick: "Docker-per-testcase", over: "shared runtime", body: "Each test case runs in its own throwaway container with capped CPU and memory, no network, and a process limit that stops fork bombs. Parallelized so compiled languages stay fast. <strong>Isolation over speed</strong> — a malicious submission can only ever hurt itself." },
-  { pick: "WebRTC mesh", over: "SFU / server relay", body: "For interview-sized rooms (2–5 people) a full mesh keeps video <strong>peer-to-peer</strong> — the server only relays signaling, never media. Lower cost, lower latency, and no video ever passes through infrastructure. An SFU would only pay off at larger scale." },
-  { pick: "Redis as ephemeral cache", over: "DB for live state", body: "Live room state — current code, language, participants — changes constantly. Writing every keystroke to Postgres would hammer it. Redis holds hot state with a TTL for fast reads and cross-instance pub/sub, while <strong>Postgres stays the durable source of truth</strong> via periodic autosave." },
-  { pick: "Unsigned client uploads", over: "proxy through backend", body: "Question images upload straight from the browser to Cloudinary with an unsigned preset scoped to one folder. The API secret never leaves the vault, and the backend never buffers large files. <strong>The right amount of security</strong> for non-sensitive assets." },
+  {
+    pick: "Three services",
+    over: "one monolith",
+    body: "Running untrusted candidate code is dangerous, and real-time signaling is latency-sensitive. Keeping them in one process means a runaway container could stall video, or a crash could take down auth. <strong>Splitting by responsibility</strong> — truth, real-time, isolation — lets each scale, fail, and restart independently.",
+  },
+  {
+    pick: "Node + Socket.io relay",
+    over: "Spring WebSocket",
+    body: "The relay handles thousands of tiny, frequent messages — keystrokes, cursor moves, ICE candidates. Node's event loop and Socket.io's mature ecosystem fit this far better than a JVM thread-per-request model. It also proves a <strong>polyglot integration</strong> between a non-JVM real-time layer and a Spring backend.",
+  },
+  {
+    pick: "Docker-per-testcase",
+    over: "shared runtime",
+    body: "Each test case runs in its own throwaway container with capped CPU and memory, no network, and a process limit that stops fork bombs. Parallelized so compiled languages stay fast. <strong>Isolation over speed</strong> — a malicious submission can only ever hurt itself.",
+  },
+  {
+    pick: "WebRTC mesh",
+    over: "SFU / server relay",
+    body: "For interview-sized rooms (2–5 people) a full mesh keeps video <strong>peer-to-peer</strong> — the server only relays signaling, never media. Lower cost, lower latency, and no video ever passes through infrastructure. An SFU would only pay off at larger scale.",
+  },
+  {
+    pick: "Redis as ephemeral cache",
+    over: "DB for live state",
+    body: "Live room state — current code, language, participants — changes constantly. Writing every keystroke to Postgres would hammer it. Redis holds hot state with a TTL for fast reads and cross-instance pub/sub, while <strong>Postgres stays the durable source of truth</strong> via periodic autosave.",
+  },
+  {
+    pick: "Unsigned client uploads",
+    over: "proxy through backend",
+    body: "Question images upload straight from the browser to Cloudinary with an unsigned preset scoped to one folder. The API secret never leaves the vault, and the backend never buffers large files. <strong>The right amount of security</strong> for non-sensitive assets.",
+  },
+
+  {
+    pick: "Nginx as the public gateway",
+    over: "exposing each service directly",
+    body: "The application exposes a single stable HTTPS endpoint through Nginx. <strong>Only Nginx is public</strong>; Spring Boot and the Relay stay on localhost. Nginx terminates TLS, serves the React build, routes REST requests, and upgrades Socket.IO connections to WebSockets.",
+  },
+
+  {
+    pick: "One VM deployment",
+    over: "multiple cloud services",
+    body: "For the current interview-sized workload, running the frontend, backend, relay, and Docker executor on one VM keeps the architecture inexpensive and operationally simple. <strong>systemd provides process supervision</strong>, while Docker isolates untrusted code. The design can later split services onto separate machines when scale requires it.",
+  },
+
+  {
+    pick: "DuckDNS + Let's Encrypt",
+    over: "paid custom domain",
+    body: "The production deployment uses a free DuckDNS hostname with a Let's Encrypt certificate. <strong>This provides a stable HTTPS URL</strong> without purchasing a domain, while still supporting secure browser APIs, WebSockets, and WebRTC signaling.",
+  },
 ];
 
 const STACK = [
-  { h: "Frontend", items: ["React 19", "Vite", "Tailwind CSS", "Zustand", "CodeMirror 6", "Socket.io client"] },
-  { h: "Backend", items: ["Spring Boot 4", "Spring Security", "JPA / Hibernate", "JWT auth", "AWS S3 SDK", "Gemini API"] },
-  { h: "Real-time & Exec", items: ["Node.js", "Socket.io", "Dockerode", "WebRTC", "ioredis", "Express"] },
-  { h: "Infrastructure", items: ["Neon Postgres", "Upstash Redis", "Cloudflare R2", "Cloudinary", "Oracle Cloud ARM", "Vercel"] },
+  {
+    h: "Frontend",
+    items: [
+      "React 19",
+      "Vite",
+      "Tailwind CSS",
+      "Zustand",
+      "CodeMirror 6",
+      "Socket.io client",
+    ],
+  },
+
+  {
+    h: "Backend",
+    items: [
+      "Spring Boot 4",
+      "Spring Security",
+      "JPA / Hibernate",
+      "JWT auth",
+      "REST API",
+      "Gemini API",
+    ],
+  },
+
+  {
+    h: "Real-time & Exec",
+    items: ["Node.js", "Socket.io", "Dockerode", "Docker", "WebRTC", "ioredis"],
+  },
+
+  {
+    h: "Production",
+    items: [
+      "Oracle Cloud VM",
+      "Nginx",
+      "systemd",
+      "DuckDNS",
+      "Let's Encrypt",
+      "HTTPS",
+    ],
+  },
+
+  {
+    h: "Data & Storage",
+    items: [
+      "Neon PostgreSQL",
+      "Upstash Redis",
+      "Cloudflare R2",
+      "S3-compatible API",
+    ],
+  },
 ];
 
 // ⇩⇩⇩ EDIT THIS to your actual repo URL ⇩⇩⇩
@@ -130,15 +342,15 @@ const Landing = () => {
   // ─── Flow-dot animation along the main data paths ──────────────────────────
   useEffect(() => {
     reduceMotion.current = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
+      "(prefers-reduced-motion: reduce)",
     ).matches;
     if (reduceMotion.current || !svgRef.current) return;
 
     const svg = svgRef.current;
     const paths = [
-      { dot: "dot1", path: "e-fe-relay", delay: 0 },
-      { dot: "dot2", path: "e-relay-be", delay: 500 },
-      { dot: "dot3", path: "e-be-exec", delay: 1000 },
+      { dot: "dot1", path: "e-nginx-backend", delay: 0 },
+      { dot: "dot2", path: "e-backend-executor", delay: 500 },
+      { dot: "dot3", path: "e-relay-executor", delay: 1000 },
     ];
     let raf;
     const starts = {};
@@ -173,7 +385,7 @@ const Landing = () => {
           if (e.isIntersecting) e.target.classList.add("in");
         });
       },
-      { threshold: 0.12 }
+      { threshold: 0.12 },
     );
     document.querySelectorAll(".cr-reveal").forEach((el) => io.observe(el));
     return () => io.disconnect();
@@ -201,12 +413,24 @@ const Landing = () => {
             Code<span>Room</span>
           </div>
           <div className="cr-nav-links">
-            <a className="cr-navlink" href="#architecture">Architecture</a>
-            <a className="cr-navlink" href="#features">Features</a>
-            <a className="cr-navlink" href="#decisions">Decisions</a>
-            <a className="cr-navlink" href="#stack">Stack</a>
-            <Link className="cr-btn cr-btn-ghost" to="/login">Sign in</Link>
-            <Link className="cr-btn cr-btn-primary" to="/register">Get started</Link>
+            <a className="cr-navlink" href="#architecture">
+              Architecture
+            </a>
+            <a className="cr-navlink" href="#features">
+              Features
+            </a>
+            <a className="cr-navlink" href="#decisions">
+              Decisions
+            </a>
+            <a className="cr-navlink" href="#stack">
+              Stack
+            </a>
+            <Link className="cr-btn cr-btn-ghost" to="/login">
+              Sign in
+            </Link>
+            <Link className="cr-btn cr-btn-primary" to="/register">
+              Get started
+            </Link>
           </div>
         </div>
       </nav>
@@ -215,10 +439,13 @@ const Landing = () => {
       <header className="cr-hero">
         <div className="cr-hero-grid" />
         <div className="cr-hero-inner">
-          <div className="cr-eyebrow">◆ Real-time collaborative interviewing</div>
+          <div className="cr-eyebrow">
+            ◆ Real-time collaborative interviewing
+          </div>
           <h1 className="cr-h1">
-            Run technical interviews<br />like{" "}
-            <span className="cr-accent">production systems</span>
+            Run technical interviews
+            <br />
+            like <span className="cr-accent">production systems</span>
           </h1>
           <p className="cr-hero-sub">
             A collaborative coding platform with live video, multi-language
@@ -233,11 +460,27 @@ const Landing = () => {
               Explore the architecture →
             </a>
           </div>
+
           <div className="cr-hero-stats">
-            <div className="cr-stat"><div className="n">3</div><div className="l">specialized services</div></div>
-            <div className="cr-stat"><div className="n">5</div><div className="l">languages sandboxed</div></div>
-            <div className="cr-stat"><div className="n">N-way</div><div className="l">WebRTC mesh video</div></div>
-            <div className="cr-stat"><div className="n">&lt;5%</div><div className="l">exec overhead vs bare metal</div></div>
+            <div className="cr-stat">
+              <div className="n">1</div>
+              <div className="l">production VM</div>
+            </div>
+
+            <div className="cr-stat">
+              <div className="n">3</div>
+              <div className="l">application services</div>
+            </div>
+
+            <div className="cr-stat">
+              <div className="n">HTTPS</div>
+              <div className="l">Let's Encrypt + Nginx</div>
+            </div>
+
+            <div className="cr-stat">
+              <div className="n">5</div>
+              <div className="l">sandboxed languages</div>
+            </div>
           </div>
         </div>
       </header>
@@ -247,11 +490,14 @@ const Landing = () => {
         <div className="cr-wrap">
           <div className="cr-section-head cr-reveal">
             <div className="cr-section-label">System design</div>
-            <h2 className="cr-section-title">One diagram, three responsibilities</h2>
+            <h2 className="cr-section-title">
+              One diagram, the whole production system
+            </h2>
             <p className="cr-section-desc">
-              CodeRoom is deliberately split into three services. Click any node
-              to see what it owns, how it communicates, and the reasoning behind
-              isolating it. The animated paths show live data flow.
+              CodeRoom separates real-time collaboration, business logic, and
+              untrusted code execution while Nginx provides a single HTTPS entry
+              point. Click any node to inspect what it owns, how it
+              communicates, and why it exists.
             </p>
           </div>
 
@@ -262,73 +508,402 @@ const Landing = () => {
                 <span className="cr-blink" />
                 Interactive — click any service to inspect it
               </div>
-              <svg ref={svgRef} className="cr-diagram" viewBox="0 0 640 470" xmlns="http://www.w3.org/2000/svg">
+              <svg
+                ref={svgRef}
+                className="cr-diagram"
+                viewBox="0 0 640 590"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <defs>
-                  <marker id="cr-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                  <marker
+                    id="cr-arrow"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="6"
+                    refY="3"
+                    orient="auto"
+                  >
                     <path d="M0,0 L6,3 L0,6 Z" fill="#5c6773" />
                   </marker>
                 </defs>
 
                 {/* EDGES */}
                 <g>
-                  <path className="cr-edge" id="e-fe-relay" style={{ opacity: edgeOpacity("e-fe-relay") }} d="M 150 90 L 150 175" markerEnd="url(#cr-arrow)" />
-                  <text className="cr-edge-label" x="158" y="140">ws / socket.io</text>
+                  {/* internet → domain → nginx */}
+                  <path
+                    className="cr-edge"
+                    id="e-internet-domain"
+                    d="M 320 26 L 320 46"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <path
+                    className="cr-edge"
+                    id="e-domain-nginx"
+                    style={{ opacity: edgeOpacity("e-domain-nginx") }}
+                    d="M 320 74 L 320 96"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <text className="cr-edge-label" x="332" y="88">
+                    HTTPS :443
+                  </text>
 
-                  <path className="cr-edge" id="e-fe-be" style={{ opacity: edgeOpacity("e-fe-be") }} d="M 210 70 Q 470 70 490 175" markerEnd="url(#cr-arrow)" />
-                  <text className="cr-edge-label" x="330" y="55">REST / JWT</text>
+                  {/* nginx → client / backend / relay */}
+                  <path
+                    className="cr-edge"
+                    id="e-nginx-client"
+                    style={{ opacity: edgeOpacity("e-nginx-client") }}
+                    d="M 280 146 L 120 186"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <path
+                    className="cr-edge"
+                    id="e-nginx-backend"
+                    style={{ opacity: edgeOpacity("e-nginx-backend") }}
+                    d="M 320 146 L 320 186"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <path
+                    className="cr-edge"
+                    id="e-nginx-relay"
+                    style={{ opacity: edgeOpacity("e-nginx-relay") }}
+                    d="M 360 146 L 520 186"
+                    markerEnd="url(#cr-arrow)"
+                  />
 
-                  <path className="cr-edge" id="e-relay-be" style={{ opacity: edgeOpacity("e-relay-be") }} d="M 230 210 L 410 210" markerEnd="url(#cr-arrow)" />
-                  <text className="cr-edge-label" x="285" y="200">exec + autosave</text>
+                  {/* relay → redis */}
+                  <path
+                    className="cr-edge"
+                    id="e-relay-redis"
+                    style={{ opacity: edgeOpacity("e-relay-redis") }}
+                    d="M 520 246 L 520 276"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <text className="cr-edge-label" x="528" y="264">
+                    pub/sub
+                  </text>
 
-                  <path className="cr-edge" id="e-relay-redis" style={{ opacity: edgeOpacity("e-relay-redis") }} d="M 150 250 L 150 330" markerEnd="url(#cr-arrow)" />
-                  <text className="cr-edge-label" x="158" y="295">pub/sub + state</text>
+                  {/* backend → executor */}
+                  <path
+                    className="cr-edge"
+                    id="e-backend-executor"
+                    style={{ opacity: edgeOpacity("e-backend-executor") }}
+                    d="M 320 246 L 320 390"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <text className="cr-edge-label" x="328" y="320">
+                    run code
+                  </text>
 
-                  <path className="cr-edge" id="e-be-exec" style={{ opacity: edgeOpacity("e-be-exec") }} d="M 490 250 L 490 330" markerEnd="url(#cr-arrow)" />
-                  <text className="cr-edge-label" x="498" y="295">run code</text>
+                  {/* relay → executor (elbow, enters from the right) */}
+                  <path
+                    className="cr-edge"
+                    id="e-relay-executor"
+                    style={{ opacity: edgeOpacity("e-relay-executor") }}
+                    d="M 520 246 L 520 420 L 400 420"
+                    markerEnd="url(#cr-arrow)"
+                  />
 
-                  <path className="cr-edge" id="e-be-pg" style={{ opacity: edgeOpacity("e-be-pg") }} d="M 560 210 L 610 210" markerEnd="url(#cr-arrow)" />
+                  {/* executor → postgres / r2 / gemini */}
+                  <path
+                    className="cr-edge"
+                    id="e-executor-postgres"
+                    style={{ opacity: edgeOpacity("e-executor-postgres") }}
+                    d="M 280 450 L 120 506"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <path
+                    className="cr-edge"
+                    id="e-executor-r2"
+                    style={{ opacity: edgeOpacity("e-executor-r2") }}
+                    d="M 320 450 L 320 506"
+                    markerEnd="url(#cr-arrow)"
+                  />
+                  <path
+                    className="cr-edge"
+                    id="e-executor-gemini"
+                    style={{ opacity: edgeOpacity("e-executor-gemini") }}
+                    d="M 360 450 L 520 506"
+                    markerEnd="url(#cr-arrow)"
+                  />
 
                   <circle className="cr-flow-dot" r="3.5" id="dot1" />
                   <circle className="cr-flow-dot" r="3.5" id="dot2" />
                   <circle className="cr-flow-dot" r="3.5" id="dot3" />
                 </g>
 
-                {/* NODES */}
-                <g className={nodeClass("frontend")} onClick={() => setActiveNode("frontend")}>
-                  <rect className="cr-node-rect" x="60" y="20" width="180" height="50" rx="10" style={{ stroke: activeNode === "frontend" ? NODES.frontend.color : undefined }} />
-                  <text className="cr-node-title" x="76" y="42">Frontend</text>
-                  <text className="cr-node-sub" x="76" y="58" fill="#58a6ff">React · Vite · Tailwind</text>
+                {/* INTERNET + DOMAIN (non-interactive) */}
+                <text
+                  className="cr-node-title"
+                  x="320"
+                  y="18"
+                  textAnchor="middle"
+                  style={{ fill: "#5c6773", letterSpacing: "0.08em" }}
+                >
+                  INTERNET
+                </text>
+                <text
+                  className="cr-node-sub"
+                  x="320"
+                  y="62"
+                  textAnchor="middle"
+                  fill="#8b949e"
+                >
+                  coderoom-1.duckdns.org
+                </text>
+
+                {/* NGINX */}
+                <g
+                  className={nodeClass("nginx")}
+                  onClick={() => setActiveNode("nginx")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="240"
+                    y="96"
+                    width="160"
+                    height="50"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "nginx" ? NODES.nginx.color : undefined,
+                    }}
+                  />
+                  <text
+                    className="cr-node-title"
+                    x="320"
+                    y="118"
+                    textAnchor="middle"
+                  >
+                    NGINX
+                  </text>
+                  <text
+                    className="cr-node-sub"
+                    x="320"
+                    y="134"
+                    textAnchor="middle"
+                    fill="#22c55e"
+                  >
+                    TLS + Reverse Proxy
+                  </text>
                 </g>
 
-                <g className={nodeClass("relay")} onClick={() => setActiveNode("relay")}>
-                  <rect className="cr-node-rect" x="60" y="178" width="170" height="66" rx="10" style={{ stroke: activeNode === "relay" ? NODES.relay.color : undefined }} />
-                  <text className="cr-node-title" x="76" y="203">Relay</text>
-                  <text className="cr-node-sub" x="76" y="219" fill="#3fb950">Node.js · Socket.io</text>
-                  <text className="cr-node-tech" x="76" y="233">real-time · webrtc signaling</text>
+                {/* CLIENT / FRONTEND */}
+                <g
+                  className={nodeClass("client")}
+                  onClick={() => setActiveNode("client")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="40"
+                    y="186"
+                    width="160"
+                    height="60"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "client" ? NODES.client.color : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="56" y="210">
+                    React / Vite
+                  </text>
+                  <text className="cr-node-sub" x="56" y="226" fill="#58a6ff">
+                    Frontend
+                  </text>
+                  <text className="cr-node-tech" x="56" y="240">
+                    /var/www/coderoom
+                  </text>
                 </g>
 
-                <g className={nodeClass("backend")} onClick={() => setActiveNode("backend")}>
-                  <rect className="cr-node-rect" x="410" y="178" width="150" height="66" rx="10" style={{ stroke: activeNode === "backend" ? NODES.backend.color : undefined }} />
-                  <text className="cr-node-title" x="426" y="203">Backend</text>
-                  <text className="cr-node-sub" x="426" y="219" fill="#d29922">Spring Boot · JPA</text>
-                  <text className="cr-node-tech" x="426" y="233">source of truth</text>
+                {/* BACKEND */}
+                <g
+                  className={nodeClass("backend")}
+                  onClick={() => setActiveNode("backend")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="240"
+                    y="186"
+                    width="160"
+                    height="60"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "backend"
+                          ? NODES.backend.color
+                          : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="256" y="210">
+                    Spring Boot
+                  </text>
+                  <text className="cr-node-sub" x="256" y="226" fill="#d29922">
+                    Backend :8080
+                  </text>
+                  <text className="cr-node-tech" x="256" y="240">
+                    source of truth
+                  </text>
                 </g>
 
-                <g className={nodeClass("redis")} onClick={() => setActiveNode("redis")}>
-                  <rect className="cr-node-rect" x="70" y="333" width="160" height="54" rx="10" style={{ stroke: activeNode === "redis" ? NODES.redis.color : undefined }} />
-                  <text className="cr-node-title" x="86" y="356">Redis</text>
-                  <text className="cr-node-sub" x="86" y="372" fill="#f85149">Upstash · ephemeral</text>
+                {/* RELAY */}
+                <g
+                  className={nodeClass("relay")}
+                  onClick={() => setActiveNode("relay")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="440"
+                    y="186"
+                    width="160"
+                    height="60"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "relay" ? NODES.relay.color : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="456" y="210">
+                    Node Relay
+                  </text>
+                  <text className="cr-node-sub" x="456" y="226" fill="#3fb950">
+                    Socket.io :4000
+                  </text>
+                  <text className="cr-node-tech" x="456" y="240">
+                    webrtc signaling
+                  </text>
                 </g>
 
-                <g className={nodeClass("executor")} onClick={() => setActiveNode("executor")}>
-                  <rect className="cr-node-rect" x="410" y="333" width="160" height="54" rx="10" style={{ stroke: activeNode === "executor" ? NODES.executor.color : undefined }} />
-                  <text className="cr-node-title" x="426" y="356">Executor</text>
-                  <text className="cr-node-sub" x="426" y="372" fill="#bc8cff">Node · Docker sandbox</text>
+                {/* REDIS */}
+                <g
+                  className={nodeClass("redis")}
+                  onClick={() => setActiveNode("redis")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="440"
+                    y="276"
+                    width="160"
+                    height="54"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "redis" ? NODES.redis.color : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="456" y="299">
+                    Redis
+                  </text>
+                  <text className="cr-node-sub" x="456" y="315" fill="#f85149">
+                    Upstash · ephemeral
+                  </text>
                 </g>
 
-                <g className={nodeClass("postgres")} onClick={() => setActiveNode("postgres")}>
-                  <rect className="cr-node-rect" x="595" y="185" width="30" height="50" rx="6" style={{ stroke: activeNode === "postgres" ? NODES.postgres.color : undefined }} />
-                  <text className="cr-node-tech" x="610" y="213" textAnchor="middle" transform="rotate(90 610 210)" style={{ fontSize: "9px", fill: "#e6edf3" }}>Postgres</text>
+                {/* EXECUTOR */}
+                <g
+                  className={nodeClass("executor")}
+                  onClick={() => setActiveNode("executor")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="240"
+                    y="390"
+                    width="160"
+                    height="60"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "executor"
+                          ? NODES.executor.color
+                          : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="256" y="414">
+                    Executor
+                  </text>
+                  <text className="cr-node-sub" x="256" y="430" fill="#bc8cff">
+                    Docker sandbox
+                  </text>
+                  <text className="cr-node-tech" x="256" y="444">
+                    isolated execution
+                  </text>
+                </g>
+
+                {/* POSTGRES */}
+                <g
+                  className={nodeClass("postgres")}
+                  onClick={() => setActiveNode("postgres")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="40"
+                    y="506"
+                    width="160"
+                    height="54"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "postgres"
+                          ? NODES.postgres.color
+                          : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="56" y="529">
+                    Neon Postgres
+                  </text>
+                  <text className="cr-node-sub" x="56" y="545" fill="#e6edf3">
+                    durable storage
+                  </text>
+                </g>
+
+                {/* R2 */}
+                <g
+                  className={nodeClass("r2")}
+                  onClick={() => setActiveNode("r2")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="240"
+                    y="506"
+                    width="160"
+                    height="54"
+                    rx="10"
+                    style={{
+                      stroke: activeNode === "r2" ? NODES.r2.color : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="256" y="529">
+                    Cloudflare R2
+                  </text>
+                  <text className="cr-node-sub" x="256" y="545" fill="#f97316">
+                    recordings
+                  </text>
+                </g>
+
+                {/* GEMINI */}
+                <g
+                  className={nodeClass("gemini")}
+                  onClick={() => setActiveNode("gemini")}
+                >
+                  <rect
+                    className="cr-node-rect"
+                    x="440"
+                    y="506"
+                    width="160"
+                    height="54"
+                    rx="10"
+                    style={{
+                      stroke:
+                        activeNode === "gemini"
+                          ? NODES.gemini.color
+                          : undefined,
+                    }}
+                  />
+                  <text className="cr-node-title" x="456" y="529">
+                    Gemini
+                  </text>
+                  <text className="cr-node-sub" x="456" y="545" fill="#60a5fa">
+                    AI copilot
+                  </text>
                 </g>
               </svg>
             </div>
@@ -337,20 +912,45 @@ const Landing = () => {
             <div className="cr-detail cr-reveal">
               {!detail ? (
                 <div className="cr-detail-empty">
-                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#5c6773" strokeWidth="1.5">
-                    <path d="M15 15l6 6m-11-4a7 7 0 110-14 7 7 0 010 14z" strokeLinecap="round" />
+                  <svg
+                    width="40"
+                    height="40"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#5c6773"
+                    strokeWidth="1.5"
+                  >
+                    <path
+                      d="M15 15l6 6m-11-4a7 7 0 110-14 7 7 0 010 14z"
+                      strokeLinecap="round"
+                    />
                   </svg>
-                  <p>Click a service in the diagram<br />to inspect its role and rationale.</p>
+                  <p>
+                    Click a service in the diagram
+                    <br />
+                    to inspect its role and rationale.
+                  </p>
                 </div>
               ) : (
                 <div>
-                  <div className="cr-detail-tag" style={{ color: detail.color, background: detail.color + "1a", border: `1px solid ${detail.color}44` }}>
+                  <div
+                    className="cr-detail-tag"
+                    style={{
+                      color: detail.color,
+                      background: detail.color + "1a",
+                      border: `1px solid ${detail.color}44`,
+                    }}
+                  >
                     {detail.role}
                   </div>
                   <h3 className="cr-detail-h3">{detail.title}</h3>
                   <div className="cr-detail-section">
                     <h4>What it does</h4>
-                    <ul>{detail.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
+                    <ul>
+                      {detail.does.map((d, i) => (
+                        <li key={i}>{d}</li>
+                      ))}
+                    </ul>
                   </div>
                   <div className="cr-detail-section">
                     <h4>How it communicates</h4>
@@ -372,7 +972,9 @@ const Landing = () => {
         <div className="cr-wrap">
           <div className="cr-section-head cr-reveal">
             <div className="cr-section-label">Capabilities</div>
-            <h2 className="cr-section-title">Everything an interview actually needs</h2>
+            <h2 className="cr-section-title">
+              Everything an interview actually needs
+            </h2>
           </div>
           <div className="cr-feat-grid">
             {FEATURES.map((f, i) => (
@@ -425,7 +1027,11 @@ const Landing = () => {
             {STACK.map((col, i) => (
               <div className="cr-stack-col" key={i}>
                 <h4>{col.h}</h4>
-                <ul>{col.items.map((it, j) => <li key={j}>{it}</li>)}</ul>
+                <ul>
+                  {col.items.map((it, j) => (
+                    <li key={j}>{it}</li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
@@ -444,7 +1050,12 @@ const Landing = () => {
             <Link className="cr-btn cr-btn-primary cr-btn-lg" to="/register">
               Create free account
             </Link>
-            <a className="cr-btn cr-btn-ghost cr-btn-lg" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+            <a
+              className="cr-btn cr-btn-ghost cr-btn-lg"
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               View source on GitHub →
             </a>
           </div>
@@ -456,7 +1067,9 @@ const Landing = () => {
         <div className="cr-wrap cr-footer-inner">
           <p>CodeRoom — built by Anubhav</p>
           <div className="cr-footer-links">
-            <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
+            <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+              GitHub
+            </a>
             <Link to="/login">Sign in</Link>
             <Link to="/register">Get started</Link>
           </div>

@@ -34,7 +34,7 @@ const io = new Server(httpServer, {
         origin: [
             'http://localhost:5173',        // Vite dev server
             'http://localhost:3000',        // fallback
-            'https://coderoom.vercel.app'   // production later
+            'https://coderoom-1.duckdns.org'   // production later
         ],
         methods: ['GET', 'POST'],
         credentials: true

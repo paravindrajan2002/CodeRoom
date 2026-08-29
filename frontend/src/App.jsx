@@ -10,6 +10,7 @@ import ProtectedRoute from './components/shared/ProtectedRoute.jsx';
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
 import useAuthStore from './store/authStore.js';
 import Landing from './pages/Landing.jsx';
+import MobileNotice from './MobileNotice.jsx';
 
 function App() {
     const { isAuthenticated } = useAuthStore();
@@ -28,6 +29,7 @@ function App() {
                         },
                     }}
                 />
+                <MobileNotice/>
                 <Routes>
                     <Route
                         path="/"

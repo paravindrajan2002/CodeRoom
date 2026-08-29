@@ -113,7 +113,7 @@ public class SecurityConfig {
                 config.setAllowedOrigins(List.of(
                                 "http://localhost:5173",
                                 "http://localhost:3000",
-                                "https://coderoom.vercel.app"
+                                "https://coderoom-1.duckdns.org"
                 ));
 
                 config.setAllowedMethods(List.of(
