@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coderoom-frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coderoom-frontend
+  template:
+    metadata:
+      labels:
+        app: coderoom-frontend
+    spec:
+      containers:
+        - name: frontend-code
+          image: justaravind/coderoom-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
