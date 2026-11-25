@@ -58,7 +58,7 @@ jobs:
         run: |
           kubectl --context=minikube set image \
             -f kubernetes/coderoomdeploy.yaml \
-            frontend=${{ secrets.DOCKERHUB_USERNAME }}/coderoom-frontend:${{ github.sha }} \
+            frontend-code=${{ secrets.DOCKERHUB_USERNAME }}/coderoom-frontend:${{ github.sha }} \
             --local -o yaml | kubectl --context=minikube apply -f -
 
           kubectl --context=minikube apply -f kubernetes/service.yaml
