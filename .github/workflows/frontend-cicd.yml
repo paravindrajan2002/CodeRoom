@@ -44,7 +44,7 @@ jobs:
   deploy:
     name: Deploy to Kubernetes
     needs: build-and-push
-    runs-on: [self-hosted, linux, x64, minikube]
+    runs-on: [self-hosted, linux, x64]
 
     steps:
       - name: Checkout Repository
